@@ -8,7 +8,7 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.1"
+#define VERSION "0.0.2"
 
 #pragma semicolon 1
 
@@ -19,10 +19,14 @@
 #define DEFAULT_MINSIZE { -32.0, -32.0, -32.0 }
 #define DEFAULT_MAXSIZE { 32.0, 32.0, 32.0 }
 
+#define PEV_TYPE pev_netname
+#define PEV_ID pev_message
+
 #define m_flNextAttack 83
 
 #define BOX_CLASSNAME "bwb"
 #define ANCHOR_CLASSNAME "bwb_anchor"
+#define SELECTED_ANCHOR_CLASSNAME "bwb_selected_anchor"
 
 new const g_szModel[] = "sprites/cnt1.spr";
 new g_iSpriteLine;
@@ -32,7 +36,11 @@ new Float:g_fDistance[33];
 new g_iCatched[33];
 new g_iMarked[33];
 
+new g_iSelectedBox[33];
+
 new bool:g_bEditMode[33];
+
+new giUNIQUE = 1;
 
 
 public plugin_init()
@@ -60,6 +68,16 @@ public cmd_bwb(id)
     menu_additem(menu, "Create Box");
     menu_additem(menu, fmt("Edit Mode%s", g_bEditMode[id] ? "\y[ON]" : "\r[OFF]"));
 
+    if(g_iSelectedBox[id]) {
+        new type[32], index[32];
+        pev(g_iSelectedBox[id], PEV_ID, index, charsmax(index));
+        pev(g_iSelectedBox[id], PEV_TYPE, type, charsmax(type));
+        menu_additem(menu, fmt("Select next\y[Current: %s, Type: %s]", index, type));
+    } else {
+        menu_additem(menu, "Select next");
+    }
+    
+
     menu_display(id, menu);
 
     return PLUGIN_HANDLED;
@@ -75,7 +93,12 @@ public bwbmenu_handler(id, menu, item)
         case 0: {
             new Float:origin[3];
             pev(id, pev_origin, origin);
-            create_box(origin);
+            new ent = create_box(origin);
+
+            if(g_bEditMode[id]) {
+                set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
+                create_anchors(ent);
+            }
         }
         case 1: {
             g_bEditMode[id] = !g_bEditMode[id];
@@ -86,35 +109,53 @@ public bwbmenu_handler(id, menu, item)
                     set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
                     create_anchors(ent);
                 }
+
+                if(pev_valid(g_iSelectedBox[id])) {
+                    create_selected_anchor(id, g_iSelectedBox[id]);
+                }
             } else {
                 new ent = -1;
                 while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
                     remove_task(ent);
                     remove_anchors(ent);
                 }
+                remove_selected_anchor(id);
+            }
+        }
+        case 2: {
+            new ent = g_iSelectedBox[id] ? g_iSelectedBox[id] : -1;
+            new start = ent;
+            new found;
+
+            while(!(start == -1 && ent == 0) && !found) {
+                while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
+                    g_iSelectedBox[id] = ent;
+                    found = true;
+                    break;
+                }
+            }
+
+            if(found) {
+                remove_selected_anchor(id);
+                create_selected_anchor(id, ent);
             }
         }
     }
+
+    cmd_bwb(id);
 
     menu_destroy(menu);
     return PLUGIN_HANDLED;
 }
 
-create_box(const Float:origin[3], const Float:mins[3] = DEFAULT_MINSIZE, const Float:maxs[3] = DEFAULT_MAXSIZE)
+create_box(const Float:origin[3], const class[] = "box", const Float:mins[3] = DEFAULT_MINSIZE, const Float:maxs[3] = DEFAULT_MAXSIZE)
 {
     new ent = create_entity("info_target");
 
     entity_set_string(ent, EV_SZ_classname, BOX_CLASSNAME);
-    //set_pev(ent, PEV_TYPE, szClass);
+    set_pev(ent, PEV_TYPE, class);
 
-    /* new szActualId[32];
-    if( szId[0] == '^0' ) {
-        formatex(szActualId, 31, "Box#%d", (giUNIQUE) );
-        set_pev(ent, PEV_ID, szActualId);
-    }else {
-        set_pev(ent, PEV_ID, szId);
-    }
-    giUNIQUE++; */
+    set_pev(ent, PEV_ID, fmt("Box#%d", giUNIQUE++));
 
     DispatchSpawn(ent);
 
@@ -203,6 +244,39 @@ get_anchor(box, num)
         }
     }
     return ent;
+}
+
+create_selected_anchor(id, box)
+{
+    new ent = create_entity("info_target");
+    entity_set_string(ent, EV_SZ_classname, SELECTED_ANCHOR_CLASSNAME);
+
+    new Float:origin[3];
+    pev(box, pev_origin, origin);
+
+    entity_set_model(ent, g_szModel);
+    entity_set_origin(ent, origin);
+
+    entity_set_size(ent, Float:{ -3.0, -3.0, -3.0 }, Float:{ 3.0, 3.0, 3.0 });
+
+    set_pev(ent, pev_solid, SOLID_BBOX);
+    set_pev(ent, pev_movetype, MOVETYPE_NOCLIP);
+    set_pev(ent, pev_owner, box);
+
+    set_pev(ent, pev_iuser3, id);
+
+    set_pev(ent, pev_scale, 0.4);
+
+    set_rendering(ent, kRenderFxPulseFast, 150, 150, 0, kRenderTransAdd, 255);
+}
+remove_selected_anchor(id)
+{
+    new ent = -1;
+    while( (ent = find_ent_by_class(ent, SELECTED_ANCHOR_CLASSNAME) ) ) {
+        if(pev(ent, pev_iuser3) == id) {
+            remove_entity(ent);
+        }
+    }
 }
 
 // Visual
@@ -322,7 +396,7 @@ public fwTraceLine(const Float:v1[], const Float:v2[], fNoMonsters, id, ptr)
     } else {
         new szClass[32];
         pev(ent, pev_classname, szClass, 31);
-        if( equal(szClass, ANCHOR_CLASSNAME) ) {
+        if(equal(szClass, ANCHOR_CLASSNAME) || equal(szClass, SELECTED_ANCHOR_CLASSNAME)) {
             if( pev(id, pev_button) & IN_ATTACK ) {
                 anchor_move_init(id, ent);
             } else {
@@ -359,7 +433,17 @@ anchor_move_process(id, ent)
 
     set_pev(ent, pev_origin, vec);
 
+    new classname[32];
+    pev(ent, pev_classname, classname, charsmax(classname));
+
     new box = pev(ent, pev_owner);
+
+    if(equal(classname, SELECTED_ANCHOR_CLASSNAME)) {
+        box_update_origin(box, vec);
+        return;
+    }
+
+    
     new num1 = pev(ent, pev_iuser4);
 
     new num2 = (~num1) & 0b111;
@@ -400,6 +484,28 @@ box_update_size(box, const Float:vec[3], const Float:vec2[3], anchor = -1)
 
     entity_set_origin(box, origin);
     entity_set_size(box, mins, maxs);
+
+    new sanchor = -1;
+    if((sanchor = find_ent_by_owner(sanchor, SELECTED_ANCHOR_CLASSNAME, box))) {
+        entity_set_origin(sanchor, origin);
+    }
+}
+box_update_origin(box, Float:vec[3])
+{
+    entity_set_origin(box, vec);
+
+    new Float:mins[3], Float:maxs[3];
+    pev(box, pev_absmin, mins);
+    pev(box, pev_absmax, maxs);
+
+    box_update_anchors_entity(box, 0b000, mins[0], mins[1], mins[2]);
+    box_update_anchors_entity(box, 0b001, mins[0], mins[1], maxs[2]);
+    box_update_anchors_entity(box, 0b010, mins[0], maxs[1], mins[2]);
+    box_update_anchors_entity(box, 0b011, mins[0], maxs[1], maxs[2]);
+    box_update_anchors_entity(box, 0b100, maxs[0], mins[1], mins[2]);
+    box_update_anchors_entity(box, 0b101, maxs[0], mins[1], maxs[2]);
+    box_update_anchors_entity(box, 0b110, maxs[0], maxs[1], mins[2]);
+    box_update_anchors_entity(box, 0b111, maxs[0], maxs[1], maxs[2]);
 }
 box_update_anchors_entity(box, num, Float:x, Float:y, Float:z)
 {
