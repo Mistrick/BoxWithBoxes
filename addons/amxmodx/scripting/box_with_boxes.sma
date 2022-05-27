@@ -8,7 +8,7 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.2"
+#define VERSION "0.0.3"
 
 #pragma semicolon 1
 
@@ -42,6 +42,14 @@ new bool:g_bEditMode[33];
 
 new giUNIQUE = 1;
 
+enum _:TypeStruct {
+    Type[32],
+    Color[3]
+};
+
+new type_info[TypeStruct];
+new Array:g_aTypes;
+
 
 public plugin_init()
 {
@@ -61,22 +69,100 @@ public plugin_precache()
 
     g_iSpriteLine = precache_model("sprites/white.spr");
 }
+public plugin_cfg()
+{
+    load_types();
+}
+load_types()
+{
+    g_aTypes = ArrayCreate(TypeStruct, 1);
+
+    new INIParser:parser = INI_CreateParser();
+
+    INI_SetParseEnd(parser, "ini_parse_end");
+    INI_SetReaders(parser, "ini_key_value", "ini_new_section");
+    new bool:result = INI_ParseFile(parser, "addons/amxmodx/configs/box_with_boxes/types.ini");
+    
+    if(!result) {
+        // TODO
+    }
+}
+public ini_new_section(INIParser:handle, const section[], bool:invalid_tokens, bool:close_bracket, bool:extra_tokens, curtok, any:data)
+{
+    if(type_info[Type]) {
+        // push type
+        server_print("Type: %s, rgb %d %d %d", type_info[Type], type_info[Color][0], type_info[Color][1], type_info[Color][2]);
+        ArrayPushArray(g_aTypes, type_info);
+    }
+    
+    copy(type_info[Type], charsmax(type_info[Type]), section);
+
+    return true;
+}
+public ini_key_value(INIParser:handle, const key[], const value[], bool:invalid_tokens, bool:equal_token, bool:quotes, curtok, any:data)
+{
+    new k[32];
+    copy(k, charsmax(k), key);
+    remove_quotes(k);
+    if(equal(k, "color")) {
+        new color[3];
+        parse_color(value, color);
+        /* for(new i; i < 3; i++) {
+            type_info[Color][i] = color[i];
+        } */
+        type_info[Color] = color;
+    }
+
+    return true;
+}
+public ini_parse_end(INIParser:handle, bool:halted, any:data)
+{
+    if(type_info[Type]) {
+        // push type
+        server_print("Type: %s, rgb %d %d %d", type_info[Type], type_info[Color][0], type_info[Color][1], type_info[Color][2]);
+        ArrayPushArray(g_aTypes, type_info);
+    }
+
+    INI_DestroyParser(handle);
+}
+
+stock parse_color(const string[], color[3])
+{
+    new r[4], g[4], b[4];
+    parse(string, r, charsmax(r), g, charsmax(g), b, charsmax(b));
+    color[0] = str_to_num(r);
+    color[1] = str_to_num(g);
+    color[2] = str_to_num(b);
+}
+
 public cmd_bwb(id)
 {
     new menu = menu_create("Box with Boxes", "bwbmenu_handler");
 
-    menu_additem(menu, "Create Box");
-    menu_additem(menu, fmt("Edit Mode%s", g_bEditMode[id] ? "\y[ON]" : "\r[OFF]"));
+    menu_additem(menu, "Create box", "1");
+    menu_additem(menu, fmt("Edit mode %s", g_bEditMode[id] ? "\y[ON]" : "\r[OFF]"), "2");
 
     if(g_iSelectedBox[id]) {
         new type[32], index[32];
         pev(g_iSelectedBox[id], PEV_ID, index, charsmax(index));
         pev(g_iSelectedBox[id], PEV_TYPE, type, charsmax(type));
-        menu_additem(menu, fmt("Select next\y[Current: %s, Type: %s]", index, type));
+        menu_additem(menu, fmt("Select next \y[Current: %s, Type: %s]", index, type), "3");
     } else {
-        menu_additem(menu, "Select next");
+        menu_additem(menu, "Select next", "3");
     }
-    
+
+    menu_additem(menu, "Select the nearest", "4");
+
+    menu_additem(menu, "Remove selected box", "5");
+
+    menu_additem(menu, "Move to selected box \rUNDONE", "6");
+
+    menu_additem(menu, "Change box type", "7");
+
+    // TODO: player noclip
+    // TODO: change box type
+
+
 
     menu_display(id, menu);
 
@@ -89,18 +175,33 @@ public bwbmenu_handler(id, menu, item)
         return PLUGIN_HANDLED;
     }
 
-    switch(item) {
-        case 0: {
+    new item_info[8];
+    menu_item_getinfo(menu, item, _, item_info, charsmax(item_info));
+    menu_destroy(menu);
+
+    new index = str_to_num(item_info);
+
+    switch(index) {
+        case 1: {
             new Float:origin[3];
             pev(id, pev_origin, origin);
             new ent = create_box(origin);
 
+            if(pev_valid(g_iSelectedBox[id])) {
+                // remove_task(g_iSelectedBox[id]);
+                // remove_anchors(g_iSelectedBox[id]);
+                remove_selected_anchor(id);
+            }
+            
+            g_iSelectedBox[id] = ent;
+
             if(g_bEditMode[id]) {
                 set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
                 create_anchors(ent);
+                // create_selected_anchor(id, g_iSelectedBox[id]);
             }
         }
-        case 1: {
+        case 2: {
             g_bEditMode[id] = !g_bEditMode[id];
 
             if(g_bEditMode[id]) {
@@ -111,6 +212,10 @@ public bwbmenu_handler(id, menu, item)
                 }
 
                 if(pev_valid(g_iSelectedBox[id])) {
+                    /* ent = g_iSelectedBox[id];
+                    set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
+                    create_anchors(ent); */
+
                     create_selected_anchor(id, g_iSelectedBox[id]);
                 }
             } else {
@@ -119,16 +224,28 @@ public bwbmenu_handler(id, menu, item)
                     remove_task(ent);
                     remove_anchors(ent);
                 }
-                remove_selected_anchor(id);
+                if(pev_valid(g_iSelectedBox[id])) {
+                    /* new ent = g_iSelectedBox[id];
+                    remove_task(ent);
+                    remove_anchors(ent); */
+
+                    remove_selected_anchor(id);
+                }
             }
         }
-        case 2: {
+        case 3: {
             new ent = g_iSelectedBox[id] ? g_iSelectedBox[id] : -1;
             new start = ent;
             new found;
 
             while(!(start == -1 && ent == 0) && !found) {
                 while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
+
+                    /* if(pev_valid(g_iSelectedBox[id])) {
+                        remove_task(g_iSelectedBox[id]);
+                        remove_anchors(g_iSelectedBox[id]);
+                    } */
+
                     g_iSelectedBox[id] = ent;
                     found = true;
                     break;
@@ -137,14 +254,107 @@ public bwbmenu_handler(id, menu, item)
 
             if(found) {
                 remove_selected_anchor(id);
-                create_selected_anchor(id, ent);
+                if(g_bEditMode[id]) {
+                    create_selected_anchor(id, ent);
+
+                    /* set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
+                    create_anchors(ent); */
+                }
+            }
+        }
+        case 4: {
+            new nearest;
+            new Float:ndist, Float:dist;
+
+            new ent = -1;
+            while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
+                dist = entity_range(id, ent);
+                if(!nearest || dist < ndist) {
+                    ndist = dist;
+                    nearest = ent;
+                }
+            }
+
+            if(nearest) {
+                remove_selected_anchor(id);
+                if(g_bEditMode[id]) {
+                    if(pev_valid(g_iSelectedBox[id])) {
+                        remove_task(g_iSelectedBox[id]);
+                        remove_anchors(g_iSelectedBox[id]);
+                    }
+
+                    create_selected_anchor(id, nearest);
+
+                    /* set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", nearest, .flags = "b");
+                    create_anchors(nearest); */
+                }
+
+                g_iSelectedBox[id] = nearest;
+            }
+        }
+        case 5: {
+            if(pev_valid(g_iSelectedBox[id])) {
+                new ent = g_iSelectedBox[id];
+                remove_task(ent);
+                remove_anchors(ent);
+                remove_selected_anchor(id);
+
+                remove_box(ent);
+                g_iSelectedBox[id] = 0;
+            }
+        }
+        case 6: {
+            // TODO: move to selected box
+        }
+        case 7: {
+            if(pev_valid(g_iSelectedBox[id])) {
+                show_type_menu(id);
+                return PLUGIN_HANDLED;
             }
         }
     }
 
     cmd_bwb(id);
 
+    return PLUGIN_HANDLED;
+}
+
+show_type_menu(id)
+{
+    new type[32], index[32];
+    pev(g_iSelectedBox[id], PEV_ID, index, charsmax(index));
+    pev(g_iSelectedBox[id], PEV_TYPE, type, charsmax(type));
+
+    new menu = menu_create(fmt("Type menu^nCurrent box: %s, type: %s", index, type), "type_menu_handler");
+
+    for(new i, size = ArraySize(g_aTypes); i < size; i++) {
+        ArrayGetArray(g_aTypes, i, type_info);
+        menu_additem(menu, type_info[Type]);
+    }
+
+    menu_display(id, menu);
+}
+
+public type_menu_handler(id, menu, item)
+{
+    if(item == MENU_EXIT) {
+        menu_destroy(menu);
+        if(is_user_connected(id)) {
+            cmd_bwb(id);
+        }
+        return PLUGIN_HANDLED;
+    }
+
+    new item_name[32];
+    menu_item_getinfo(menu, item, _, _, _, item_name, charsmax(item_name));
     menu_destroy(menu);
+
+    if(pev_valid(g_iSelectedBox[id])) {
+        set_pev(g_iSelectedBox[id], PEV_TYPE, item_name);
+    }
+
+    cmd_bwb(id);
+
     return PLUGIN_HANDLED;
 }
 
@@ -279,6 +489,14 @@ remove_selected_anchor(id)
     }
 }
 
+remove_box(box)
+{
+    // TODO: add forward
+    new Array:a = Array:pev(box, pev_iuser3);
+    ArrayDestroy(a);
+    remove_entity(box);
+}
+
 // Visual
 public box_visual_think(ent)
 {
@@ -341,9 +559,21 @@ get_type_color(ent, color[3])
         color[2] = 50;
     } */
 
-    color[0] = 50;
-    color[1] = 255;
-    color[2] = 50;
+    new type[32];
+    pev(ent, PEV_TYPE, type, charsmax(type));
+
+    new r = ArrayFindString(g_aTypes, type);
+
+    if(r != -1) {
+        ArrayGetArray(g_aTypes, r, type_info);
+        color[0] = type_info[Color][0];
+        color[1] = type_info[Color][1];
+        color[2] = type_info[Color][2];
+    } else {
+        color[0] = 50;
+        color[1] = 255;
+        color[2] = 50;
+    }
 
     return 1;
 }
@@ -419,6 +649,20 @@ anchor_move_process(id, ent)
     new Float:vec[3];
     pev(id, pev_v_angle, vec);
     angle_vector(vec, ANGLEVECTOR_FORWARD, vec);
+
+    const Float:TIME_DELAY = 0.05;
+
+    new buttons = pev(id, pev_button);
+    static Float:last_change;
+    if(buttons & IN_USE && get_gametime() > last_change + TIME_DELAY) {
+        g_fDistance[id] -= 1.0;
+        last_change = get_gametime();
+    }
+
+    if(buttons & IN_RELOAD && get_gametime() > last_change + TIME_DELAY) {
+        g_fDistance[id] += 1.0;
+        last_change = get_gametime();
+    }
 
     xs_vec_mul_scalar(vec, g_fDistance[id], vec);
 
@@ -604,7 +848,11 @@ public Box_Think(box)
 
         new Float:d = fm_boxents_distance(box, ent);
 
-        if(d > 0.0) {
+        new flags = pev(ent, pev_flags);
+        new Float:v[3];
+        pev(ent, pev_velocity, v);
+
+        if(d > 0.0 || ent > MaxClients && flags & FL_ONGROUND && vector_length(v) == 0.0) {
             box_end_touch(box, ent);
             ArrayDeleteItem(a, i);
         }
