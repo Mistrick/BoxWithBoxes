@@ -8,7 +8,7 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.3"
+#define VERSION "0.0.4"
 
 #pragma semicolon 1
 
@@ -68,6 +68,32 @@ public plugin_precache()
     precache_model(g_szModel);
 
     g_iSpriteLine = precache_model("sprites/white.spr");
+}
+public plugin_natives()
+{
+    register_library("box_with_boxes");
+
+    register_native("bwb_create_box", "native_create_box");
+}
+public native_create_box(plugin, params)
+{
+    enum {
+        arg_type = 1,
+        arg_origin,
+        arg_mins,
+        arg_maxs
+    };
+
+    new type[32];
+    get_string(arg_type, type, charsmax(type));
+    new Float:origin[3];
+    get_array_f(arg_origin, origin, sizeof(origin));
+    new Float:mins[3];
+    get_array_f(arg_mins, mins, sizeof(mins));
+    new Float:maxs[3];
+    get_array_f(arg_maxs, maxs, sizeof(maxs));
+
+    create_box(origin, type, mins, maxs);
 }
 public plugin_cfg()
 {
