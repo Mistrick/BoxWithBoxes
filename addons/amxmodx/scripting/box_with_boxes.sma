@@ -8,7 +8,7 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.4"
+#define VERSION "0.0.5"
 
 #pragma semicolon 1
 
@@ -50,18 +50,34 @@ enum _:TypeStruct {
 new type_info[TypeStruct];
 new Array:g_aTypes;
 
+enum Forwards {
+    StartTouch,
+    StopTouch,
+    FrameTouch,
+    BoxCreated,
+    BoxDeleted
+};
+
+new g_hForwards[Forwards];
+
 
 public plugin_init()
 {
     register_plugin(PLUGIN, VERSION, AUTHOR);
     register_clcmd("bwb", "cmd_bwb");
 
-    register_think(BOX_CLASSNAME, "Box_Think");
+    register_think(BOX_CLASSNAME, "fwd_box_think");
 
-    register_forward(FM_TraceLine, "fwTraceLine", 1);
-    register_forward(FM_PlayerPreThink, "fwPlayerPreThink", 1);
+    register_forward(FM_TraceLine, "fwd_trace_line", 1);
+    register_forward(FM_PlayerPreThink, "fwd_player_prethink", 1);
 
-    register_touch(BOX_CLASSNAME, "*", "fwBoxTouch");
+    register_touch(BOX_CLASSNAME, "*", "fwd_box_touch");
+
+    g_hForwards[StartTouch] = CreateMultiForward("bwb_box_start_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
+    g_hForwards[StopTouch] = CreateMultiForward("bwb_box_stop_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
+    g_hForwards[FrameTouch] = CreateMultiForward("bwb_box_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
+    g_hForwards[BoxCreated] = CreateMultiForward("bwb_box_created", ET_STOP, FP_CELL, FP_STRING);
+    g_hForwards[BoxDeleted] = CreateMultiForward("bwb_box_deleted", ET_STOP, FP_CELL, FP_STRING);
 }
 public plugin_precache()
 {
@@ -166,7 +182,7 @@ public cmd_bwb(id)
     new menu = menu_create("Box with Boxes", "bwbmenu_handler");
 
     menu_additem(menu, "Create box", "1");
-    menu_additem(menu, fmt("Edit mode %s", g_bEditMode[id] ? "\y[ON]" : "\r[OFF]"), "2");
+    // menu_additem(menu, fmt("Edit mode %s", g_bEditMode[id] ? "\y[ON]" : "\r[OFF]"), "2");
 
     if(g_iSelectedBox[id]) {
         new type[32], index[32];
@@ -178,19 +194,18 @@ public cmd_bwb(id)
     }
 
     menu_additem(menu, "Select the nearest", "4");
-
     menu_additem(menu, "Remove selected box", "5");
-
-    menu_additem(menu, "Move to selected box \rUNDONE", "6");
-
+    menu_additem(menu, "Move to selected box", "6");
     menu_additem(menu, "Change box type", "7");
 
     // TODO: player noclip
-    // TODO: change box type
-
-
 
     menu_display(id, menu);
+
+    if(!g_bEditMode[id]) {
+        g_bEditMode[id] = true;
+        switch_edit_mode(id);
+    }
 
     return PLUGIN_HANDLED;
 }
@@ -198,6 +213,8 @@ public bwbmenu_handler(id, menu, item)
 {
     if(item == MENU_EXIT) {
         menu_destroy(menu);
+        g_bEditMode[id] = false;
+        switch_edit_mode(id);
         return PLUGIN_HANDLED;
     }
 
@@ -304,10 +321,10 @@ public bwbmenu_handler(id, menu, item)
             if(nearest) {
                 remove_selected_anchor(id);
                 if(g_bEditMode[id]) {
-                    if(pev_valid(g_iSelectedBox[id])) {
+                    /* if(pev_valid(g_iSelectedBox[id])) {
                         remove_task(g_iSelectedBox[id]);
                         remove_anchors(g_iSelectedBox[id]);
-                    }
+                    } */
 
                     create_selected_anchor(id, nearest);
 
@@ -330,7 +347,12 @@ public bwbmenu_handler(id, menu, item)
             }
         }
         case 6: {
-            // TODO: move to selected box
+            if(pev_valid(g_iSelectedBox[id])) {
+                new ent = g_iSelectedBox[id];
+                new Float:origin[3];
+                pev(ent, pev_origin, origin);
+                set_pev(id, pev_origin, origin);
+            }
         }
         case 7: {
             if(pev_valid(g_iSelectedBox[id])) {
@@ -384,6 +406,38 @@ public type_menu_handler(id, menu, item)
     return PLUGIN_HANDLED;
 }
 
+switch_edit_mode(id)
+{
+    if(g_bEditMode[id]) {
+        new ent = -1;
+        while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
+            set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
+            create_anchors(ent);
+        }
+
+        if(pev_valid(g_iSelectedBox[id])) {
+            /* ent = g_iSelectedBox[id];
+            set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
+            create_anchors(ent); */
+
+            create_selected_anchor(id, g_iSelectedBox[id]);
+        }
+    } else {
+        new ent = -1;
+        while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
+            remove_task(ent);
+            remove_anchors(ent);
+        }
+        if(pev_valid(g_iSelectedBox[id])) {
+            /* new ent = g_iSelectedBox[id];
+            remove_task(ent);
+            remove_anchors(ent); */
+
+            remove_selected_anchor(id);
+        }
+    }
+}
+
 create_box(const Float:origin[3], const class[] = "box", const Float:mins[3] = DEFAULT_MINSIZE, const Float:maxs[3] = DEFAULT_MAXSIZE)
 {
     new ent = create_entity("info_target");
@@ -395,7 +449,7 @@ create_box(const Float:origin[3], const class[] = "box", const Float:mins[3] = D
 
     DispatchSpawn(ent);
 
-    // entity_set_model(ent, g_szModel);
+    entity_set_model(ent, g_szModel);
 
     set_pev(ent, pev_effects, EF_NODRAW);
     set_pev(ent, pev_solid, SOLID_TRIGGER);
@@ -403,7 +457,6 @@ create_box(const Float:origin[3], const class[] = "box", const Float:mins[3] = D
     set_pev(ent, pev_enemy, 1);
 
     set_pev(ent, pev_nextthink, get_gametime() + 0.1);
-    // BOX_Add(ent, editor);
 
     // touch info
     new Array:a = ArrayCreate(1, 1);
@@ -412,8 +465,8 @@ create_box(const Float:origin[3], const class[] = "box", const Float:mins[3] = D
     entity_set_origin(ent, origin);
     entity_set_size(ent, mins, maxs);
 
-    /* new iRet;
-    ExecuteForward(fwOnCreate, iRet, ent, szClass); */
+    new ret;
+    ExecuteForward(g_hForwards[BoxCreated], ret, ent, class);
 
     return ent;
 }
@@ -464,7 +517,7 @@ create_anchor_entity(box, vertex, Float:x, Float:y, Float:z)
 remove_anchors(box)
 {
     new ent = -1;
-    while( (ent = find_ent_by_owner(ent, ANCHOR_CLASSNAME, box) ) ) {
+    while((ent = find_ent_by_owner(ent, ANCHOR_CLASSNAME, box))) {
         remove_entity(ent);
     }
 }
@@ -508,7 +561,7 @@ create_selected_anchor(id, box)
 remove_selected_anchor(id)
 {
     new ent = -1;
-    while( (ent = find_ent_by_class(ent, SELECTED_ANCHOR_CLASSNAME) ) ) {
+    while((ent = find_ent_by_class(ent, SELECTED_ANCHOR_CLASSNAME))) {
         if(pev(ent, pev_iuser3) == id) {
             remove_entity(ent);
         }
@@ -518,6 +571,12 @@ remove_selected_anchor(id)
 remove_box(box)
 {
     // TODO: add forward
+    new type[32];
+    pev(box, PEV_TYPE, type, charsmax(type));
+
+    new ret;
+    ExecuteForward(g_hForwards[BoxDeleted], ret, box, type);
+
     new Array:a = Array:pev(box, pev_iuser3);
     ArrayDestroy(a);
     remove_entity(box);
@@ -530,25 +589,28 @@ public box_visual_think(ent)
     pev(ent, pev_absmin, mins);
     pev(ent, pev_absmax, maxs);
 
-    _draw_line(ent, maxs[0], maxs[1], maxs[2], maxs[0], maxs[1], mins[2]);
-    _draw_line(ent, mins[0], maxs[1], maxs[2], mins[0], maxs[1], mins[2]);
-    _draw_line(ent, maxs[0], mins[1], maxs[2], maxs[0], mins[1], mins[2]);
-    _draw_line(ent, mins[0], mins[1], maxs[2], mins[0], mins[1], mins[2]);
+    new color[3];
+    get_type_color(ent, color);
 
-    _draw_line(ent, maxs[0], maxs[1], maxs[2], mins[0], maxs[1], maxs[2]);
-    _draw_line(ent, maxs[0], maxs[1], mins[2], mins[0], maxs[1], mins[2]);
-    _draw_line(ent, maxs[0], mins[1], maxs[2], mins[0], mins[1], maxs[2]);
-    _draw_line(ent, maxs[0], mins[1], mins[2], mins[0], mins[1], mins[2]);
+    _draw_line(color, maxs[0], maxs[1], maxs[2], maxs[0], maxs[1], mins[2]);
+    _draw_line(color, mins[0], maxs[1], maxs[2], mins[0], maxs[1], mins[2]);
+    _draw_line(color, maxs[0], mins[1], maxs[2], maxs[0], mins[1], mins[2]);
+    _draw_line(color, mins[0], mins[1], maxs[2], mins[0], mins[1], mins[2]);
 
-    _draw_line(ent, maxs[0], maxs[1], maxs[2], maxs[0], mins[1], maxs[2]);
-    _draw_line(ent, mins[0], maxs[1], maxs[2], mins[0], mins[1], maxs[2]);
-    _draw_line(ent, maxs[0], maxs[1], mins[2], maxs[0], mins[1], mins[2]);
-    _draw_line(ent, mins[0], maxs[1], mins[2], mins[0], mins[1], mins[2]);
+    _draw_line(color, maxs[0], maxs[1], maxs[2], mins[0], maxs[1], maxs[2]);
+    _draw_line(color, maxs[0], maxs[1], mins[2], mins[0], maxs[1], mins[2]);
+    _draw_line(color, maxs[0], mins[1], maxs[2], mins[0], mins[1], maxs[2]);
+    _draw_line(color, maxs[0], mins[1], mins[2], mins[0], mins[1], mins[2]);
 
-    _draw_line(ent, mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
+    _draw_line(color, maxs[0], maxs[1], maxs[2], maxs[0], mins[1], maxs[2]);
+    _draw_line(color, mins[0], maxs[1], maxs[2], mins[0], mins[1], maxs[2]);
+    _draw_line(color, maxs[0], maxs[1], mins[2], maxs[0], mins[1], mins[2]);
+    _draw_line(color, mins[0], maxs[1], mins[2], mins[0], mins[1], mins[2]);
+
+    _draw_line(color, mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
 }
 
-_draw_line(ent, Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2)
+_draw_line(color[3], Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2)
 {
     new Float:start[3];
     start[0] = x1;
@@ -560,30 +622,13 @@ _draw_line(ent, Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2)
     stop[1] = y2;
     stop[2] = z2;
 
-    new color[3];
-    get_type_color(ent, color);
-
     draw_line(start, stop, color, g_iSpriteLine);
 }
 
 get_type_color(ent, color[3])
 {
-    if( !pev_valid(ent) )
+    if(!pev_valid(ent))
         return 0;
-
-    /* new szNetName[32];
-    pev(ent, PEV_TYPE, szNetName, 31);
-
-    new iType;
-    if ( TrieGetCell(gTypes, szNetName, iType) ) {
-        color[0] = giTypeColors[iType][0];
-        color[1] = giTypeColors[iType][1];
-        color[2] = giTypeColors[iType][2];
-    } else {
-        color[0] = 50;
-        color[1] = 255;
-        color[2] = 50;
-    } */
 
     new type[32];
     pev(ent, PEV_TYPE, type, charsmax(type));
@@ -606,19 +651,19 @@ get_type_color(ent, color[3])
 
 
 // Move Process
-public fwPlayerPreThink(id)
+public fwd_player_prethink(id)
 {
-    if( !g_bEditMode[id] ) {
+    if(!g_bEditMode[id]) {
         return FMRES_IGNORED;
     }
 
     set_pdata_float(id, m_flNextAttack, 1.0, 5);
 
-    if( !is_valid_ent(g_iCatched[id]) ) {
+    if(!is_valid_ent(g_iCatched[id])) {
         return FMRES_IGNORED;
     }
 
-    if( pev(id, pev_button) & IN_ATTACK ) {
+    if(pev(id, pev_button) & IN_ATTACK) {
         anchor_move_process(id, g_iCatched[id]);
     }else {
         anchor_move_uninit(id, g_iCatched[id]);
@@ -626,24 +671,24 @@ public fwPlayerPreThink(id)
 
     return FMRES_IGNORED;
 }
-public fwTraceLine(const Float:v1[], const Float:v2[], fNoMonsters, id, ptr)
+public fwd_trace_line(const Float:v1[], const Float:v2[], fNoMonsters, id, ptr)
 {
-    if( !is_user_alive(id) ) {
+    if(!is_user_alive(id)) {
         return FMRES_IGNORED;
     }
 
-    if( !g_bEditMode[id] ) {
+    if(!g_bEditMode[id]) {
         return FMRES_IGNORED;
     }
 
     new ent = get_tr2(ptr, TR_pHit);
 
-    if( !is_valid_ent(ent) ) {
+    if(!is_valid_ent(ent)) {
         anchor_unmark(id, g_iMarked[id]);
         return FMRES_IGNORED;
     }
 
-    if( g_iCatched[id] ) {
+    if(g_iCatched[id]) {
         if( pev(id, pev_button) & IN_ATTACK ) {
             anchor_move_process(id, g_iCatched[id]);
         } else {
@@ -676,6 +721,7 @@ anchor_move_process(id, ent)
     pev(id, pev_v_angle, vec);
     angle_vector(vec, ANGLEVECTOR_FORWARD, vec);
 
+    // TODO: settings for delay and distance in menu
     const Float:TIME_DELAY = 0.05;
 
     new buttons = pev(id, pev_button);
@@ -713,7 +759,6 @@ anchor_move_process(id, ent)
         return;
     }
 
-    
     new num1 = pev(ent, pev_iuser4);
 
     new num2 = (~num1) & 0b111;
@@ -846,7 +891,7 @@ anchor_move_uninit(id, ent)
 
 // Touch Mechanic
 
-public fwBoxTouch(box, ent)
+public fwd_box_touch(box, ent)
 {
     new Array:a = Array:pev(box, pev_iuser3);
 
@@ -855,10 +900,16 @@ public fwBoxTouch(box, ent)
         box_start_touch(box, ent);
     }
 
+    new type[32];
+    pev(box, PEV_TYPE, type, charsmax(type));
+
+    new ret;
+    ExecuteForward(g_hForwards[FrameTouch], ret, box, ent, type);
+
     return PLUGIN_CONTINUE;
 }
 
-public Box_Think(box)
+public fwd_box_think(box)
 {
     new Float:gametime = get_gametime();
     new Array:a = Array:pev(box, pev_iuser3);
@@ -872,13 +923,13 @@ public Box_Think(box)
             continue;
         }
 
-        new Float:d = fm_boxents_distance(box, ent);
+        new collision = intersect(box, ent);
 
         new flags = pev(ent, pev_flags);
         new Float:v[3];
         pev(ent, pev_velocity, v);
 
-        if(d > 0.0 || ent > MaxClients && flags & FL_ONGROUND && vector_length(v) == 0.0) {
+        if(!collision || ent > MaxClients && flags & FL_ONGROUND && vector_length(v) == 0.0) {
             box_end_touch(box, ent);
             ArrayDeleteItem(a, i);
         }
@@ -895,6 +946,11 @@ box_start_touch(box, ent)
     console_print(0, "%f :: box %d, ent %d, start touch", get_gametime(), box, ent);
 
     //TODO: forwards api
+    new type[32];
+    pev(box, PEV_TYPE, type, charsmax(type));
+
+    new ret;
+    ExecuteForward(g_hForwards[StartTouch], ret, box, ent, type);
 }
 box_end_touch(box, ent)
 {
@@ -902,10 +958,20 @@ box_end_touch(box, ent)
     console_print(0, "%f :: box %d, ent %d, end touch", get_gametime(), box, ent);
 
     //TODO: forwards api
+    new type[32];
+    pev(box, PEV_TYPE, type, charsmax(type));
+
+    new ret;
+    ExecuteForward(g_hForwards[StopTouch], ret, box, ent, type);
 }
 box_invalid_touch(box, ent)
 {
     console_print(0, "%f :: box %d, ent %d, invalid ent", get_gametime(), box, ent);
 
     //TODO: forwards api
+    /* new type[32];
+    pev(box, PEV_TYPE, type, charsmax(type));
+
+    new ret;
+    ExecuteForward(g_hForwards[InvalidTouch], ret, box, ent, type); */
 }

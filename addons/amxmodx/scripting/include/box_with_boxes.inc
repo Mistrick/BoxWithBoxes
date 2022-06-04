@@ -16,3 +16,28 @@
 * TODO
 */
 native bwb_create_box(const type[], Float:origin[3], Float:mins[3], Float:maxs[3]);
+
+/*
+* TODO
+*/
+forward bwb_box_start_touch(box, ent, const type[]);
+
+/*
+* TODO
+*/
+forward bwb_box_stop_touch(box, ent, const type[]);
+
+/*
+* TODO
+*/
+forward bwb_box_touch(box, ent, const type[]);
+
+/*
+* TODO
+*/
+forward bwb_box_created(box, const type[]);
+
+/*
+* TODO
+*/
+forward bwb_box_deleted(box, const type[]);
