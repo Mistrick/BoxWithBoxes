@@ -6,7 +6,7 @@
 
 #define PLUGIN "Box Storage"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.1"
+#define VERSION "0.0.2"
 
 #pragma semicolon 1
 
@@ -53,14 +53,7 @@ load_boxes()
 public ini_new_section(INIParser:handle, const section[], bool:invalid_tokens, bool:close_bracket, bool:extra_tokens, curtok, any:data)
 {
     if(box_info[Index]) {
-        // create box
-        new Float:origin[3], Float:mins[3], Float:maxs[3];
-        for(new i; i < 3; i++) {
-            origin[i] = box_info[Origin][i];
-            mins[i] = box_info[Mins][i];
-            maxs[i] = box_info[Maxs][i];
-        }
-        bwb_create_box(box_info[Type], origin, mins, maxs);
+        create_box();
     }
     
     copy(box_info[Index], charsmax(box_info[Index]), section);
@@ -95,17 +88,21 @@ public ini_key_value(INIParser:handle, const key[], const value[], bool:invalid_
 public ini_parse_end(INIParser:handle, bool:halted, any:data)
 {
     if(box_info[Index]) {
-        // create box
-        new Float:origin[3], Float:mins[3], Float:maxs[3];
-        for(new i; i < 3; i++) {
-            origin[i] = box_info[Origin][i];
-            mins[i] = box_info[Mins][i];
-            maxs[i] = box_info[Maxs][i];
-        }
-        bwb_create_box(box_info[Type], origin, mins, maxs);
+        create_box();
     }
 
     INI_DestroyParser(handle);
+}
+
+create_box()
+{
+    new Float:origin[3], Float:mins[3], Float:maxs[3];
+    for(new i; i < 3; i++) {
+        origin[i] = box_info[Origin][i];
+        mins[i] = box_info[Mins][i];
+        maxs[i] = box_info[Maxs][i];
+    }
+    bwb_create_box(box_info[Type], origin, mins, maxs);
 }
 
 parse_coords(const string[], Float:coords[3])
