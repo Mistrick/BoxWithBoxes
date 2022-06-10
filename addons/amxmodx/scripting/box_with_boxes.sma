@@ -1,5 +1,6 @@
 // Credits: R3X@Box System
 #include <amxmodx>
+#include <amxmisc>
 #include <fakemeta>
 #include <engine>
 #include <xs>
@@ -8,7 +9,7 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.5"
+#define VERSION "0.0.6"
 
 #pragma semicolon 1
 
@@ -60,11 +61,18 @@ enum Forwards {
 
 new g_hForwards[Forwards];
 
+enum _:HistoryStruct {
+    BoxEnt,
+    Float:AbsMins[3],
+    Float:AbsMaxs[3]
+};
+new Array:g_aHistory;
 
 public plugin_init()
 {
     register_plugin(PLUGIN, VERSION, AUTHOR);
-    register_clcmd("bwb", "cmd_bwb");
+    register_clcmd("bwb", "cmd_bwb", ADMIN_CFG);
+    register_clcmd("radio1", "cmd_undo");
 
     register_think(BOX_CLASSNAME, "fwd_box_think");
 
@@ -78,6 +86,8 @@ public plugin_init()
     g_hForwards[FrameTouch] = CreateMultiForward("bwb_box_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
     g_hForwards[BoxCreated] = CreateMultiForward("bwb_box_created", ET_STOP, FP_CELL, FP_STRING);
     g_hForwards[BoxDeleted] = CreateMultiForward("bwb_box_deleted", ET_STOP, FP_CELL, FP_STRING);
+
+    g_aHistory = ArrayCreate(HistoryStruct, 1);
 }
 public plugin_precache()
 {
@@ -177,12 +187,22 @@ stock parse_color(const string[], color[3])
     color[2] = str_to_num(b);
 }
 
-public cmd_bwb(id)
+public cmd_bwb(id, level, cid)
 {
-    new menu = menu_create("Box with Boxes", "bwbmenu_handler");
+    if(!cmd_access(id, level, cid, 1)) {
+        return PLUGIN_HANDLED;
+    }
+
+    show_bwb_menu(id);
+
+    return PLUGIN_HANDLED;
+}
+
+show_bwb_menu(id)
+{
+    new menu = menu_create("Box with Boxes", "bwb_menu_handler");
 
     menu_additem(menu, "Create box", "1");
-    // menu_additem(menu, fmt("Edit mode %s", g_bEditMode[id] ? "\y[ON]" : "\r[OFF]"), "2");
 
     if(g_iSelectedBox[id]) {
         new type[32], index[32];
@@ -209,7 +229,7 @@ public cmd_bwb(id)
 
     return PLUGIN_HANDLED;
 }
-public bwbmenu_handler(id, menu, item)
+public bwb_menu_handler(id, menu, item)
 {
     if(item == MENU_EXIT) {
         menu_destroy(menu);
@@ -362,7 +382,7 @@ public bwbmenu_handler(id, menu, item)
         }
     }
 
-    cmd_bwb(id);
+    show_bwb_menu(id);
 
     return PLUGIN_HANDLED;
 }
@@ -388,7 +408,7 @@ public type_menu_handler(id, menu, item)
     if(item == MENU_EXIT) {
         menu_destroy(menu);
         if(is_user_connected(id)) {
-            cmd_bwb(id);
+            show_bwb_menu(id);
         }
         return PLUGIN_HANDLED;
     }
@@ -401,7 +421,9 @@ public type_menu_handler(id, menu, item)
         set_pev(g_iSelectedBox[id], PEV_TYPE, item_name);
     }
 
-    cmd_bwb(id);
+    // TODO: forward type changed
+
+    show_bwb_menu(id);
 
     return PLUGIN_HANDLED;
 }
@@ -436,6 +458,17 @@ switch_edit_mode(id)
             remove_selected_anchor(id);
         }
     }
+}
+
+public cmd_undo(id)
+{
+    if(!g_bEditMode[id]) {
+        return PLUGIN_CONTINUE;
+    }
+
+    box_history_pop();
+
+    return PLUGIN_HANDLED;
 }
 
 create_box(const Float:origin[3], const class[] = "box", const Float:mins[3] = DEFAULT_MINSIZE, const Float:maxs[3] = DEFAULT_MAXSIZE)
@@ -878,7 +911,8 @@ anchor_move_init(id, ent)
         }
     } */
 
-    // BOX_History_Push(pev(ent, pev_owner) );
+    new box = pev(ent, pev_owner);
+    box_history_push(box);
 }
 anchor_move_uninit(id, ent)
 {
@@ -888,6 +922,41 @@ anchor_move_uninit(id, ent)
     set_rendering(ent, kRenderFxNone, 0, 150, 0, kRenderTransAdd, 255);
 }
 
+// History
+box_history_push(box)
+{
+    new history_info[HistoryStruct];
+    history_info[BoxEnt] = box;
+    new Float:mins[3], Float:maxs[3];
+    pev(box, pev_absmin, mins);
+    pev(box, pev_absmax, maxs);
+    history_info[AbsMins] = mins;
+    history_info[AbsMaxs] = maxs;
+
+    ArrayPushArray(g_aHistory, history_info);
+}
+box_history_pop()
+{
+    new size = ArraySize(g_aHistory);
+    if(!size) {
+        return;
+    }
+
+    new history_info[HistoryStruct];
+    ArrayGetArray(g_aHistory, size - 1, history_info);
+
+    new box = history_info[BoxEnt];
+
+    new Float:mins[3], Float:maxs[3];
+    for(new i; i < 3; i++) {
+        mins[i] = history_info[AbsMins][i];
+        maxs[i] = history_info[AbsMaxs][i];
+    }
+
+    ArrayDeleteItem(g_aHistory, size - 1);
+
+    box_update_size(box, mins, maxs);
+}
 
 // Touch Mechanic
 
@@ -939,13 +1008,11 @@ public fwd_box_think(box)
 }
 
 // Forwards
-
 box_start_touch(box, ent)
 {
-    client_print(0, print_chat, "box %d, ent %d, start touch, t %f", box, ent, get_gametime());
-    console_print(0, "%f :: box %d, ent %d, start touch", get_gametime(), box, ent);
+    // client_print(0, print_chat, "box %d, ent %d, start touch, t %f", box, ent, get_gametime());
+    // console_print(0, "%f :: box %d, ent %d, start touch", get_gametime(), box, ent);
 
-    //TODO: forwards api
     new type[32];
     pev(box, PEV_TYPE, type, charsmax(type));
 
@@ -954,10 +1021,9 @@ box_start_touch(box, ent)
 }
 box_end_touch(box, ent)
 {
-    client_print(0, print_chat, "box %d, ent %d, end touch, t %f", box, ent, get_gametime());
-    console_print(0, "%f :: box %d, ent %d, end touch", get_gametime(), box, ent);
+    // client_print(0, print_chat, "box %d, ent %d, end touch, t %f", box, ent, get_gametime());
+    // console_print(0, "%f :: box %d, ent %d, end touch", get_gametime(), box, ent);
 
-    //TODO: forwards api
     new type[32];
     pev(box, PEV_TYPE, type, charsmax(type));
 
@@ -966,12 +1032,11 @@ box_end_touch(box, ent)
 }
 box_invalid_touch(box, ent)
 {
-    console_print(0, "%f :: box %d, ent %d, invalid ent", get_gametime(), box, ent);
+    // console_print(0, "%f :: box %d, ent %d, invalid ent", get_gametime(), box, ent);
 
-    //TODO: forwards api
-    /* new type[32];
+    new type[32];
     pev(box, PEV_TYPE, type, charsmax(type));
 
     new ret;
-    ExecuteForward(g_hForwards[InvalidTouch], ret, box, ent, type); */
+    ExecuteForward(g_hForwards[InvalidTouch], ret, box, ent, type);
 }

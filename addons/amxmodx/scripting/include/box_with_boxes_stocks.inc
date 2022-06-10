@@ -40,9 +40,13 @@ stock Float:fm_boxents_distance(boxent1, boxent2) {
     return fm_boxes_distance(mins1, maxs1, mins2, maxs2);
 }
 
-stock draw_line(Float:start[], Float:stop[], iColor[3], sprite_line)
+stock draw_line(Float:start[3], Float:stop[3], iColor[3], sprite_line)
 {
-    message_begin(MSG_BROADCAST, SVC_TEMPENTITY);
+    // message_begin(MSG_BROADCAST, SVC_TEMPENTITY);
+    new origin[3];
+    FVecIVec(start, origin);
+
+    message_begin(MSG_PVS, SVC_TEMPENTITY, origin);
     write_byte(0);
     engfunc(EngFunc_WriteCoord, start[0]);
     engfunc(EngFunc_WriteCoord, start[1]);
