@@ -56,7 +56,8 @@ enum Forwards {
     StopTouch,
     FrameTouch,
     BoxCreated,
-    BoxDeleted
+    BoxDeleted,
+    InvalidTouch
 };
 
 new g_hForwards[Forwards];
@@ -86,6 +87,7 @@ public plugin_init()
     g_hForwards[FrameTouch] = CreateMultiForward("bwb_box_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
     g_hForwards[BoxCreated] = CreateMultiForward("bwb_box_created", ET_STOP, FP_CELL, FP_STRING);
     g_hForwards[BoxDeleted] = CreateMultiForward("bwb_box_deleted", ET_STOP, FP_CELL, FP_STRING);
+    g_hForwards[InvalidTouch] = CreateMultiForward("bwb_box_invalid_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
 
     g_aHistory = ArrayCreate(HistoryStruct, 1);
 }

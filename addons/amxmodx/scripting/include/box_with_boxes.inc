@@ -35,6 +35,11 @@ forward bwb_box_touch(box, ent, const type[]);
 /*
 * TODO
 */
+forward bwb_box_invalid_touch(box, ent, const type[]);
+
+/*
+* TODO
+*/
 forward bwb_box_created(box, const type[]);
 
 /*
