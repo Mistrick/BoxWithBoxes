@@ -5,7 +5,7 @@
 
 #define PLUGIN "Box Camper"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.1"
+#define VERSION "0.0.2"
 
 #pragma semicolon 1
 
@@ -16,18 +16,21 @@
 new const CAMPER_TYPE[] = "Camper Zone";
 
 new Float:g_fStartCamping[33];
+new g_iCamperBoxType;
 
 public plugin_init()
 {
     register_plugin(PLUGIN, VERSION, AUTHOR);
+
+    g_iCamperBoxType = bwb_register_box_type(CAMPER_TYPE, {255, 0, 0});
 }
 
-public bwb_box_start_touch(box, id, const type[])
+public bwb_box_start_touch(box, id, type_index)
 {
     if(id < 1 || id > MaxClients) {
         return PLUGIN_CONTINUE;
     }
-    if(!equal(type, CAMPER_TYPE)) {
+    if(type_index != g_iCamperBoxType) {
         return PLUGIN_CONTINUE;
     }
 
@@ -36,12 +39,12 @@ public bwb_box_start_touch(box, id, const type[])
     return PLUGIN_CONTINUE;
 }
 
-public bwb_box_stop_touch(box, id, const type[])
+public bwb_box_stop_touch(box, id, type_index)
 {
     if(id < 1 || id > MaxClients) {
         return PLUGIN_CONTINUE;
     }
-    if(!equal(type, CAMPER_TYPE)) {
+    if(type_index != g_iCamperBoxType) {
         return PLUGIN_CONTINUE;
     }
 
@@ -50,12 +53,12 @@ public bwb_box_stop_touch(box, id, const type[])
     return PLUGIN_CONTINUE;
 }
 
-public bwb_box_touch(box, id, const type[])
+public bwb_box_touch(box, id, type_index)
 {
     if(id < 1 || id > MaxClients) {
         return PLUGIN_CONTINUE;
     }
-    if(!equal(type, CAMPER_TYPE)) {
+    if(type_index != g_iCamperBoxType) {
         return PLUGIN_CONTINUE;
     }
 
