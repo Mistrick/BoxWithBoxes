@@ -5,35 +5,29 @@
 
 #define PLUGIN "Box Blocking Zones"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.1"
+#define VERSION "0.0.2"
 
 #pragma semicolon 1
-
-new Trie:g_tTypes;
 
 new const BLOCKING_ZONE[] = "Blocking Zone";
 new const BLOCKING_ZONE_T[] = "Blocking Zone T";
 new const BLOCKING_ZONE_CT[] = "Blocking Zone CT";
 
+new g_iBlockingZoneTypes[3];
+
 public plugin_init()
 {
     register_plugin(PLUGIN, VERSION, AUTHOR);
+
+    g_iBlockingZoneTypes[2] = bwb_register_box_type(BLOCKING_ZONE, {255, 255, 0});
+    g_iBlockingZoneTypes[0] = bwb_register_box_type(BLOCKING_ZONE_T, {255, 55, 0});
+    g_iBlockingZoneTypes[1] = bwb_register_box_type(BLOCKING_ZONE_CT, {0, 55, 255});
 }
 
-public plugin_cfg()
+public bwb_box_touch(box, ent, type_index)
 {
-    if(!g_tTypes) {
-        g_tTypes = TrieCreate();
-        TrieSetCell(g_tTypes, BLOCKING_ZONE_T, 1);
-        TrieSetCell(g_tTypes, BLOCKING_ZONE_CT, 2);
-        TrieSetCell(g_tTypes, BLOCKING_ZONE, 3);
-    }
-}
-
-public bwb_box_touch(box, ent, const type[])
-{
-    new block_type;
-    if(!TrieGetCell(g_tTypes, type, block_type)) {
+    new block_type = get_block_type(type_index);
+    if(!block_type) {
         return PLUGIN_CONTINUE;
     }
 
@@ -67,4 +61,14 @@ public bwb_box_touch(box, ent, const type[])
     set_pev(ent, pev_velocity, vec);
 
     return PLUGIN_CONTINUE;
+}
+
+get_block_type(type_index)
+{
+    for(new i; i < sizeof(g_iBlockingZoneTypes); i++) {
+        if(type_index == g_iBlockingZoneTypes[i]) {
+            return i + 1;
+        }
+    }
+    return 0;
 }
