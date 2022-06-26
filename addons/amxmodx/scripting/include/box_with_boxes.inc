@@ -20,22 +20,37 @@ native bwb_create_box(const type[], Float:origin[3], Float:mins[3], Float:maxs[3
 /*
 * TODO
 */
-forward bwb_box_start_touch(box, ent, const type[]);
+native bwb_register_box_type(const type[], color[3] = {255, 255, 255});
 
 /*
 * TODO
 */
-forward bwb_box_stop_touch(box, ent, const type[]);
+native bwb_get_type_index(const type[]);
 
 /*
 * TODO
 */
-forward bwb_box_touch(box, ent, const type[]);
+native bwb_get_box_type(box, type[], len);
 
 /*
 * TODO
 */
-forward bwb_box_invalid_touch(box, ent, const type[]);
+forward bwb_box_start_touch(box, ent, type_index);
+
+/*
+* TODO
+*/
+forward bwb_box_stop_touch(box, ent, type_index);
+
+/*
+* TODO
+*/
+forward bwb_box_touch(box, ent, type_index);
+
+/*
+* TODO
+*/
+forward bwb_box_invalid_touch(box, ent, type_index);
 
 /*
 * TODO

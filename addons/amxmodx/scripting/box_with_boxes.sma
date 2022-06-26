@@ -9,7 +9,7 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.6"
+#define VERSION "0.1.0"
 
 #pragma semicolon 1
 
@@ -21,6 +21,7 @@
 #define DEFAULT_MAXSIZE { 32.0, 32.0, 32.0 }
 
 #define PEV_TYPE pev_netname
+#define PEV_TYPE_INDEX pev_iuser4
 #define PEV_ID pev_message
 
 #define m_flNextAttack 83
@@ -82,12 +83,12 @@ public plugin_init()
 
     register_touch(BOX_CLASSNAME, "*", "fwd_box_touch");
 
-    g_hForwards[StartTouch] = CreateMultiForward("bwb_box_start_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
-    g_hForwards[StopTouch] = CreateMultiForward("bwb_box_stop_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
-    g_hForwards[FrameTouch] = CreateMultiForward("bwb_box_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
+    g_hForwards[StartTouch] = CreateMultiForward("bwb_box_start_touch", ET_STOP, FP_CELL, FP_CELL, FP_CELL);
+    g_hForwards[StopTouch] = CreateMultiForward("bwb_box_stop_touch", ET_STOP, FP_CELL, FP_CELL, FP_CELL);
+    g_hForwards[FrameTouch] = CreateMultiForward("bwb_box_touch", ET_STOP, FP_CELL, FP_CELL, FP_CELL);
     g_hForwards[BoxCreated] = CreateMultiForward("bwb_box_created", ET_STOP, FP_CELL, FP_STRING);
     g_hForwards[BoxDeleted] = CreateMultiForward("bwb_box_deleted", ET_STOP, FP_CELL, FP_STRING);
-    g_hForwards[InvalidTouch] = CreateMultiForward("bwb_box_invalid_touch", ET_STOP, FP_CELL, FP_CELL, FP_STRING);
+    g_hForwards[InvalidTouch] = CreateMultiForward("bwb_box_invalid_touch", ET_STOP, FP_CELL, FP_CELL, FP_CELL);
 
     g_aHistory = ArrayCreate(HistoryStruct, 1);
 }
@@ -101,7 +102,12 @@ public plugin_natives()
 {
     register_library("box_with_boxes");
 
+    g_aTypes = ArrayCreate(TypeStruct, 1);
+
     register_native("bwb_create_box", "native_create_box");
+    register_native("bwb_register_box_type", "native_register_box_type");
+    register_native("bwb_get_type_index", "native_get_type_index");
+    register_native("bwb_get_box_type", "native_get_box_type");
 }
 public native_create_box(plugin, params)
 {
@@ -123,14 +129,64 @@ public native_create_box(plugin, params)
 
     create_box(origin, type, mins, maxs);
 }
+public native_register_box_type(plugin, params)
+{
+    enum {
+        arg_type = 1,
+        arg_color
+    };
+
+    new type[32];
+    get_string(arg_type, type, charsmax(type));
+
+    new index = ArrayFindString(g_aTypes, type);
+
+    if(index != -1) {
+        return index;
+    }
+
+    new color[3];
+    get_array(arg_color, color, sizeof(color));
+
+    new type_info[TypeStruct];
+    copy(type_info[Type], charsmax(type_info[Type]), type);
+    type_info[Color] = color;
+
+    index = ArrayPushArray(g_aTypes, type_info);
+
+    return index;
+}
+public native_get_type_index(plugin, params)
+{
+    enum {
+        arg_type = 1,
+    };
+
+    new type[32];
+    get_string(arg_type, type, charsmax(type));
+
+    return ArrayFindString(g_aTypes, type);
+}
+public native_get_box_type(plugin, params)
+{
+    enum {
+        arg_box = 1,
+        arg_type,
+        arg_len
+    };
+
+    new box = get_param(arg_box);
+
+    new type[32];
+    pev(box, PEV_TYPE, type, charsmax(type));
+    set_string(arg_type, type, get_param(arg_len));
+}
 public plugin_cfg()
 {
     load_types();
 }
 load_types()
 {
-    g_aTypes = ArrayCreate(TypeStruct, 1);
-
     new INIParser:parser = INI_CreateParser();
 
     INI_SetParseEnd(parser, "ini_parse_end");
@@ -144,9 +200,7 @@ load_types()
 public ini_new_section(INIParser:handle, const section[], bool:invalid_tokens, bool:close_bracket, bool:extra_tokens, curtok, any:data)
 {
     if(type_info[Type]) {
-        // push type
-        server_print("Type: %s, rgb %d %d %d", type_info[Type], type_info[Color][0], type_info[Color][1], type_info[Color][2]);
-        ArrayPushArray(g_aTypes, type_info);
+        push_type();
     }
     
     copy(type_info[Type], charsmax(type_info[Type]), section);
@@ -161,9 +215,6 @@ public ini_key_value(INIParser:handle, const key[], const value[], bool:invalid_
     if(equal(k, "color")) {
         new color[3];
         parse_color(value, color);
-        /* for(new i; i < 3; i++) {
-            type_info[Color][i] = color[i];
-        } */
         type_info[Color] = color;
     }
 
@@ -172,12 +223,18 @@ public ini_key_value(INIParser:handle, const key[], const value[], bool:invalid_
 public ini_parse_end(INIParser:handle, bool:halted, any:data)
 {
     if(type_info[Type]) {
-        // push type
-        server_print("Type: %s, rgb %d %d %d", type_info[Type], type_info[Color][0], type_info[Color][1], type_info[Color][2]);
-        ArrayPushArray(g_aTypes, type_info);
+        push_type();
     }
 
     INI_DestroyParser(handle);
+}
+
+push_type()
+{
+    new index = ArrayFindString(g_aTypes, type_info[Type]);
+    if(index == -1) {
+        ArrayPushArray(g_aTypes, type_info);
+    }
 }
 
 stock parse_color(const string[], color[3])
@@ -479,6 +536,10 @@ create_box(const Float:origin[3], const class[] = "box", const Float:mins[3] = D
 
     entity_set_string(ent, EV_SZ_classname, BOX_CLASSNAME);
     set_pev(ent, PEV_TYPE, class);
+
+    new index = ArrayFindString(g_aTypes, class);
+
+    set_pev(ent, PEV_TYPE_INDEX, index);
 
     set_pev(ent, PEV_ID, fmt("Box#%d", giUNIQUE++));
 
@@ -971,11 +1032,10 @@ public fwd_box_touch(box, ent)
         box_start_touch(box, ent);
     }
 
-    new type[32];
-    pev(box, PEV_TYPE, type, charsmax(type));
+    new index = pev(box, PEV_TYPE_INDEX);
 
     new ret;
-    ExecuteForward(g_hForwards[FrameTouch], ret, box, ent, type);
+    ExecuteForward(g_hForwards[FrameTouch], ret, box, ent, index);
 
     return PLUGIN_CONTINUE;
 }
@@ -1012,33 +1072,22 @@ public fwd_box_think(box)
 // Forwards
 box_start_touch(box, ent)
 {
-    // client_print(0, print_chat, "box %d, ent %d, start touch, t %f", box, ent, get_gametime());
-    // console_print(0, "%f :: box %d, ent %d, start touch", get_gametime(), box, ent);
-
-    new type[32];
-    pev(box, PEV_TYPE, type, charsmax(type));
+    new index = pev(box, PEV_TYPE_INDEX);
 
     new ret;
-    ExecuteForward(g_hForwards[StartTouch], ret, box, ent, type);
+    ExecuteForward(g_hForwards[StartTouch], ret, box, ent, index);
 }
 box_end_touch(box, ent)
 {
-    // client_print(0, print_chat, "box %d, ent %d, end touch, t %f", box, ent, get_gametime());
-    // console_print(0, "%f :: box %d, ent %d, end touch", get_gametime(), box, ent);
-
-    new type[32];
-    pev(box, PEV_TYPE, type, charsmax(type));
+    new index = pev(box, PEV_TYPE_INDEX);
 
     new ret;
-    ExecuteForward(g_hForwards[StopTouch], ret, box, ent, type);
+    ExecuteForward(g_hForwards[StopTouch], ret, box, ent, index);
 }
 box_invalid_touch(box, ent)
 {
-    // console_print(0, "%f :: box %d, ent %d, invalid ent", get_gametime(), box, ent);
-
-    new type[32];
-    pev(box, PEV_TYPE, type, charsmax(type));
+    new index = pev(box, PEV_TYPE_INDEX);
 
     new ret;
-    ExecuteForward(g_hForwards[InvalidTouch], ret, box, ent, type);
+    ExecuteForward(g_hForwards[InvalidTouch], ret, box, ent, index);
 }
