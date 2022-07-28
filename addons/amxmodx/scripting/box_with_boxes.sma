@@ -9,7 +9,7 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.1.0"
+#define VERSION "0.2.0"
 
 #pragma semicolon 1
 
@@ -431,6 +431,7 @@ public bwb_menu_handler(id, menu, item)
                 new Float:origin[3];
                 pev(ent, pev_origin, origin);
                 set_pev(id, pev_origin, origin);
+                remove_selected_anchor(id);
             }
         }
         case 7: {
@@ -581,6 +582,15 @@ create_anchors(box)
     create_anchor_entity(box, 0b101, maxs[0], mins[1], maxs[2]);
     create_anchor_entity(box, 0b110, maxs[0], maxs[1], mins[2]);
     create_anchor_entity(box, 0b111, maxs[0], maxs[1], maxs[2]);
+
+    /* new Float:x, Float:y, Float:z;
+    for(new i = 0b000; i <= 0b111; i++) {
+        x = i & (1 << 0) ? maxs[0] : mins[0];
+        y = i & (1 << 1) ? maxs[1] : mins[1];
+        z = i & (1 << 2) ? maxs[2] : mins[2];
+
+        create_anchor_entity(box, i, x, y, z);
+    } */
 }
 
 create_anchor_entity(box, vertex, Float:x, Float:y, Float:z)
@@ -688,22 +698,20 @@ public box_visual_think(ent)
     new color[3];
     get_type_color(ent, color);
 
-    _draw_line(color, maxs[0], maxs[1], maxs[2], maxs[0], maxs[1], mins[2]);
-    _draw_line(color, mins[0], maxs[1], maxs[2], mins[0], maxs[1], mins[2]);
-    _draw_line(color, maxs[0], mins[1], maxs[2], maxs[0], mins[1], mins[2]);
-    _draw_line(color, mins[0], mins[1], maxs[2], mins[0], mins[1], mins[2]);
+    _draw_line(color, mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]); // 000 111
 
-    _draw_line(color, maxs[0], maxs[1], maxs[2], mins[0], maxs[1], maxs[2]);
-    _draw_line(color, maxs[0], maxs[1], mins[2], mins[0], maxs[1], mins[2]);
-    _draw_line(color, maxs[0], mins[1], maxs[2], mins[0], mins[1], maxs[2]);
-    _draw_line(color, maxs[0], mins[1], mins[2], mins[0], mins[1], mins[2]);
-
-    _draw_line(color, maxs[0], maxs[1], maxs[2], maxs[0], mins[1], maxs[2]);
-    _draw_line(color, mins[0], maxs[1], maxs[2], mins[0], mins[1], maxs[2]);
-    _draw_line(color, maxs[0], maxs[1], mins[2], maxs[0], mins[1], mins[2]);
-    _draw_line(color, mins[0], maxs[1], mins[2], mins[0], mins[1], mins[2]);
-
-    _draw_line(color, mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
+    _draw_line(color, mins[0], mins[1], maxs[2], mins[0], mins[1], mins[2]); // 001 000
+    _draw_line(color, mins[0], maxs[1], mins[2], mins[0], mins[1], mins[2]); // 010 000
+    _draw_line(color, mins[0], maxs[1], maxs[2], mins[0], mins[1], maxs[2]); // 011 001
+    _draw_line(color, mins[0], maxs[1], maxs[2], mins[0], maxs[1], mins[2]); // 011 010
+    _draw_line(color, maxs[0], mins[1], mins[2], mins[0], mins[1], mins[2]); // 100 000
+    _draw_line(color, maxs[0], mins[1], maxs[2], mins[0], mins[1], maxs[2]); // 101 001
+    _draw_line(color, maxs[0], mins[1], maxs[2], maxs[0], mins[1], mins[2]); // 101 100
+    _draw_line(color, maxs[0], maxs[1], mins[2], mins[0], maxs[1], mins[2]); // 110 010
+    _draw_line(color, maxs[0], maxs[1], mins[2], maxs[0], mins[1], mins[2]); // 110 100
+    _draw_line(color, maxs[0], maxs[1], maxs[2], mins[0], maxs[1], maxs[2]); // 111 011
+    _draw_line(color, maxs[0], maxs[1], maxs[2], maxs[0], mins[1], maxs[2]); // 111 101
+    _draw_line(color, maxs[0], maxs[1], maxs[2], maxs[0], maxs[1], mins[2]); // 111 110
 }
 
 _draw_line(color[3], Float:x1, Float:y1, Float:z1, Float:x2, Float:y2, Float:z2)
@@ -784,16 +792,16 @@ public fwd_trace_line(const Float:v1[], const Float:v2[], fNoMonsters, id, ptr)
         return FMRES_IGNORED;
     }
 
-    if(g_iCatched[id]) {
+    if(is_valid_ent(g_iCatched[id])) {
         if( pev(id, pev_button) & IN_ATTACK ) {
             anchor_move_process(id, g_iCatched[id]);
         } else {
             anchor_move_uninit(id, g_iCatched[id]);
         }
     } else {
-        new szClass[32];
-        pev(ent, pev_classname, szClass, 31);
-        if(equal(szClass, ANCHOR_CLASSNAME) || equal(szClass, SELECTED_ANCHOR_CLASSNAME)) {
+        new classname[32];
+        pev(ent, pev_classname, classname, charsmax(classname));
+        if(equal(classname, ANCHOR_CLASSNAME) || equal(classname, SELECTED_ANCHOR_CLASSNAME)) {
             if( pev(id, pev_button) & IN_ATTACK ) {
                 anchor_move_init(id, ent);
             } else {
@@ -805,6 +813,48 @@ public fwd_trace_line(const Float:v1[], const Float:v2[], fNoMonsters, id, ptr)
     }
 
     return FMRES_IGNORED;
+}
+
+box_part(ent)
+{
+    new classname[32];
+    pev(ent, pev_classname, classname, charsmax(classname));
+    if(equal(classname, ANCHOR_CLASSNAME) || equal(classname, SELECTED_ANCHOR_CLASSNAME)) {
+        return true;
+    }
+    return false;
+}
+
+Float:get_end_point_distance(id, ent, Float:origin[3], Float:vec[3], Float:endp[3])
+{
+    new Float:start[3], Float:end[3];
+    xs_vec_copy(origin, start);
+
+    xs_vec_mul_scalar(vec, 9999.9, end);
+    xs_vec_add(end, origin, end);
+
+    while(engfunc(EngFunc_TraceLine, start, end, IGNORE_MONSTERS | IGNORE_MISSILE, ent, 0)) {
+        new hit = get_tr2(0, TR_pHit);
+        if(hit == id) {
+            xs_vec_add(start, vec, start);
+            continue;
+        }
+        if(pev_valid(hit) && box_part(hit)) {
+            xs_vec_add(start, vec, start);
+            continue;
+        }
+        break;
+    }
+
+    new Float:normal[3];
+    get_tr2(0, TR_vecPlaneNormal, normal);
+    xs_vec_mul_scalar(normal, 2.0, normal);
+
+    get_tr2(0, TR_vecEndPos, end);
+
+    xs_vec_add(end, normal, endp);
+
+    return get_distance_f(origin, end);
 }
 
 anchor_move_process(id, ent)
@@ -832,16 +882,22 @@ anchor_move_process(id, ent)
         last_change = get_gametime();
     }
 
-    xs_vec_mul_scalar(vec, g_fDistance[id], vec);
-
     new Float:origin[3];
     pev(id, pev_origin, origin);
 
     new Float:view_ofs[3];
     pev(id, pev_view_ofs, view_ofs);
-
     xs_vec_add(origin, view_ofs, origin);
-    xs_vec_add(origin, vec, vec);
+
+    new Float:endp[3];
+    new Float:d = get_end_point_distance(id, ent, origin, vec, endp);
+
+    if(d > g_fDistance[id]) {
+        xs_vec_mul_scalar(vec, g_fDistance[id], vec);
+        xs_vec_add(origin, vec, vec);
+    } else {
+        vec = endp;
+    }
 
     set_pev(ent, pev_origin, vec);
 
@@ -886,6 +942,19 @@ box_update_size(box, const Float:vec[3], const Float:vec2[3], anchor = -1)
     anchor != 0b110 && box_update_anchors_entity(box, 0b110, maxs[0], maxs[1], mins[2]);
     anchor != 0b111 && box_update_anchors_entity(box, 0b111, maxs[0], maxs[1], maxs[2]);
 
+    /* new Float:x, Float:y, Float:z;
+    for(new i = 0b000; i <= 0b111; i++) {
+        if(anchor == i) {
+            continue;
+        }
+
+        x = i & (1 << 0) ? maxs[0] : mins[0];
+        y = i & (1 << 1) ? maxs[1] : mins[1];
+        z = i & (1 << 2) ? maxs[2] : mins[2];
+
+        box_update_anchors_entity(box, i, x, y, z);
+    } */
+
     new Float:origin[3];
     xs_vec_add(maxs, mins, origin);
     xs_vec_mul_scalar(origin, 0.5, origin);
@@ -917,19 +986,30 @@ box_update_origin(box, Float:vec[3])
     box_update_anchors_entity(box, 0b101, maxs[0], mins[1], maxs[2]);
     box_update_anchors_entity(box, 0b110, maxs[0], maxs[1], mins[2]);
     box_update_anchors_entity(box, 0b111, maxs[0], maxs[1], maxs[2]);
+
+    /* new Float:x, Float:y, Float:z;
+    for(new i = 0b000; i <= 0b111; i++) {
+        x = i & (1 << 0) ? maxs[0] : mins[0];
+        y = i & (1 << 1) ? maxs[1] : mins[1];
+        z = i & (1 << 2) ? maxs[2] : mins[2];
+
+        box_update_anchors_entity(box, i, x, y, z);
+    } */
 }
 box_update_anchors_entity(box, num, Float:x, Float:y, Float:z)
 {
     new ent = get_anchor(box, num);
 
-    if( is_valid_ent(ent) ) {
-        new Float:origin[3];
-        origin[0] = x;
-        origin[1] = y;
-        origin[2] = z;
-
-        entity_set_origin(ent, origin);
+    if(!is_valid_ent(ent)) {
+        return;
     }
+
+    new Float:origin[3];
+    origin[0] = x;
+    origin[1] = y;
+    origin[2] = z;
+
+    entity_set_origin(ent, origin);
 }
 anchor_mark(id, ent)
 {
@@ -939,7 +1019,9 @@ anchor_mark(id, ent)
 anchor_unmark(id, ent)
 {
     g_iMarked[id] = 0;
-    set_pev(ent, pev_scale, 0.25);
+    if(pev_valid(ent)) {
+        set_pev(ent, pev_scale, 0.25);
+    }
 }
 anchor_move_init(id, ent)
 {
@@ -975,6 +1057,16 @@ anchor_move_init(id, ent)
     } */
 
     new box = pev(ent, pev_owner);
+
+    if(g_iSelectedBox[id] != box) {
+        g_iSelectedBox[id] = box;
+        show_bwb_menu(id);
+    } else {
+        if(!find_ent_by_owner(-1, SELECTED_ANCHOR_CLASSNAME, box)) {
+            create_selected_anchor(id, box);
+        }
+    }
+
     box_history_push(box);
 }
 anchor_move_uninit(id, ent)
@@ -1010,13 +1102,17 @@ box_history_pop()
 
     new box = history_info[BoxEnt];
 
+    ArrayDeleteItem(g_aHistory, size - 1);
+
+    if(!pev_valid(box)) {
+        return;
+    }
+
     new Float:mins[3], Float:maxs[3];
     for(new i; i < 3; i++) {
         mins[i] = history_info[AbsMins][i];
         maxs[i] = history_info[AbsMaxs][i];
     }
-
-    ArrayDeleteItem(g_aHistory, size - 1);
 
     box_update_size(box, mins, maxs);
 }
