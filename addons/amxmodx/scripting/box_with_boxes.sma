@@ -9,13 +9,16 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.2.0"
+#define VERSION "0.2.1"
 
 #pragma semicolon 1
 
 #define BOX_THINK_TIMER 0.001
 #define BOX_VISUAL_THINK_TIMER 0.3
 
+// TODO: settings for delay and distance in menu
+#define MOVE_DELAY 0.05
+#define MOVE_STEP 1.0
 
 #define DEFAULT_MINSIZE { -32.0, -32.0, -32.0 }
 #define DEFAULT_MAXSIZE { 32.0, 32.0, 32.0 }
@@ -267,17 +270,26 @@ show_bwb_menu(id)
         new type[32], index[32];
         pev(g_iSelectedBox[id], PEV_ID, index, charsmax(index));
         pev(g_iSelectedBox[id], PEV_TYPE, type, charsmax(type));
-        menu_additem(menu, fmt("Select next \y[Current: %s, Type: %s]", index, type), "3");
+        menu_additem(menu, fmt("Select next \y[Current: %s, Type: %s]", index, type), "2");
     } else {
-        menu_additem(menu, "Select next", "3");
+        menu_additem(menu, "Select next", "2");
     }
 
-    menu_additem(menu, "Select the nearest", "4");
-    menu_additem(menu, "Remove selected box", "5");
-    menu_additem(menu, "Move to selected box", "6");
-    menu_additem(menu, "Change box type", "7");
+    menu_additem(menu, "Select the nearest", "3");
+    
+    menu_additem(menu, "Move to selected box", "4");
+    menu_additem(menu, "Change box type", "5");
+    menu_additem(menu, fmt("Noclip \r%s", pev(id, pev_movetype) == MOVETYPE_NOCLIP ? "[ON]" : "[OFF]"), "6");
+
+    menu_addblank2(menu);
+    menu_addblank2(menu);
+
+    menu_additem(menu, "Remove selected box", "7");
+    menu_additem(menu, "Exit", "8");
 
     // TODO: player noclip
+
+    menu_setprop(menu, MPROP_PERPAGE, 0);
 
     menu_display(id, menu);
 
@@ -324,38 +336,6 @@ public bwb_menu_handler(id, menu, item)
             }
         }
         case 2: {
-            g_bEditMode[id] = !g_bEditMode[id];
-
-            if(g_bEditMode[id]) {
-                new ent = -1;
-                while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
-                    set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
-                    create_anchors(ent);
-                }
-
-                if(pev_valid(g_iSelectedBox[id])) {
-                    /* ent = g_iSelectedBox[id];
-                    set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
-                    create_anchors(ent); */
-
-                    create_selected_anchor(id, g_iSelectedBox[id]);
-                }
-            } else {
-                new ent = -1;
-                while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
-                    remove_task(ent);
-                    remove_anchors(ent);
-                }
-                if(pev_valid(g_iSelectedBox[id])) {
-                    /* new ent = g_iSelectedBox[id];
-                    remove_task(ent);
-                    remove_anchors(ent); */
-
-                    remove_selected_anchor(id);
-                }
-            }
-        }
-        case 3: {
             new ent = g_iSelectedBox[id] ? g_iSelectedBox[id] : -1;
             new start = ent;
             new found;
@@ -384,7 +364,7 @@ public bwb_menu_handler(id, menu, item)
                 }
             }
         }
-        case 4: {
+        case 3: {
             new nearest;
             new Float:ndist, Float:dist;
 
@@ -414,7 +394,25 @@ public bwb_menu_handler(id, menu, item)
                 g_iSelectedBox[id] = nearest;
             }
         }
+        case 4: {
+            if(pev_valid(g_iSelectedBox[id])) {
+                new ent = g_iSelectedBox[id];
+                new Float:origin[3];
+                pev(ent, pev_origin, origin);
+                set_pev(id, pev_origin, origin);
+                remove_selected_anchor(id);
+            }
+        }
         case 5: {
+            if(pev_valid(g_iSelectedBox[id])) {
+                show_type_menu(id);
+                return PLUGIN_HANDLED;
+            }
+        }
+        case 6: {
+            set_pev(id, pev_movetype, pev(id, pev_movetype) == MOVETYPE_NOCLIP ? MOVETYPE_WALK : MOVETYPE_NOCLIP);
+        }
+        case 7: {
             if(pev_valid(g_iSelectedBox[id])) {
                 new ent = g_iSelectedBox[id];
                 remove_task(ent);
@@ -425,20 +423,10 @@ public bwb_menu_handler(id, menu, item)
                 g_iSelectedBox[id] = 0;
             }
         }
-        case 6: {
-            if(pev_valid(g_iSelectedBox[id])) {
-                new ent = g_iSelectedBox[id];
-                new Float:origin[3];
-                pev(ent, pev_origin, origin);
-                set_pev(id, pev_origin, origin);
-                remove_selected_anchor(id);
-            }
-        }
-        case 7: {
-            if(pev_valid(g_iSelectedBox[id])) {
-                show_type_menu(id);
-                return PLUGIN_HANDLED;
-            }
+        case 8: {
+            g_bEditMode[id] = false;
+            switch_edit_mode(id);
+            return PLUGIN_HANDLED;
         }
     }
 
@@ -676,7 +664,6 @@ remove_selected_anchor(id)
 
 remove_box(box)
 {
-    // TODO: add forward
     new type[32];
     pev(box, PEV_TYPE, type, charsmax(type));
 
@@ -686,6 +673,21 @@ remove_box(box)
     new Array:a = Array:pev(box, pev_iuser3);
     ArrayDestroy(a);
     remove_entity(box);
+
+    new size = ArraySize(g_aHistory);
+
+    if(!size) {
+        return;
+    }
+
+    new history_info[HistoryStruct];
+
+    for(new i = size - 1; i >= 0; i--) {
+        ArrayGetArray(g_aHistory, i, history_info);
+        if(box == history_info[BoxEnt]) {
+            ArrayDeleteItem(g_aHistory, i);
+        }
+    }
 }
 
 // Visual
@@ -867,19 +869,17 @@ anchor_move_process(id, ent)
     pev(id, pev_v_angle, vec);
     angle_vector(vec, ANGLEVECTOR_FORWARD, vec);
 
-    // TODO: settings for delay and distance in menu
-    const Float:TIME_DELAY = 0.05;
-
     new buttons = pev(id, pev_button);
     static Float:last_change;
-    if(buttons & IN_USE && get_gametime() > last_change + TIME_DELAY) {
-        g_fDistance[id] -= 1.0;
-        last_change = get_gametime();
+    new Float:gt = get_gametime();
+    if(buttons & IN_USE && gt > last_change + MOVE_DELAY) {
+        g_fDistance[id] -= MOVE_STEP;
+        last_change = gt;
     }
 
-    if(buttons & IN_RELOAD && get_gametime() > last_change + TIME_DELAY) {
-        g_fDistance[id] += 1.0;
-        last_change = get_gametime();
+    if(buttons & IN_RELOAD && gt > last_change + MOVE_DELAY) {
+        g_fDistance[id] += MOVE_STEP;
+        last_change = gt;
     }
 
     new Float:origin[3];
@@ -897,6 +897,10 @@ anchor_move_process(id, ent)
         xs_vec_add(origin, vec, vec);
     } else {
         vec = endp;
+
+        if(last_change == gt) {
+            g_fDistance[id] = d;
+        }
     }
 
     set_pev(ent, pev_origin, vec);
@@ -1030,7 +1034,6 @@ anchor_move_init(id, ent)
 
     new Float:view_ofs[3];
     pev(id, pev_view_ofs, view_ofs);
-
     xs_vec_add(origin, view_ofs, origin);
 
     new Float:eorigin[3];
@@ -1040,21 +1043,6 @@ anchor_move_init(id, ent)
     g_iCatched[id] = ent;
 
     set_rendering(ent, kRenderFxGlowShell, 255, 0, 0, kRenderTransAdd, 255);
-
-
-    /* static szClass[32];
-    new box = pev(ent, pev_owner);
-    for( new i = 0; i < giZonesP; i++ ) {
-        if( giZones[i] == box ) {
-            giZonesLast[id] = i;
-
-
-            pev(box, PEV_TYPE, szClass, 31);
-            gszType[id] = getTypeId(szClass);
-            refreshMenu(id);
-            break;
-        }
-    } */
 
     new box = pev(ent, pev_owner);
 
@@ -1123,12 +1111,12 @@ public fwd_box_touch(box, ent)
 {
     new Array:a = Array:pev(box, pev_iuser3);
 
+    new index = pev(box, PEV_TYPE_INDEX);
+
     if(ArrayFindValue(a, ent) == -1) {
         ArrayPushCell(a, ent);
-        box_start_touch(box, ent);
+        box_start_touch(box, ent, index);
     }
-
-    new index = pev(box, PEV_TYPE_INDEX);
 
     new ret;
     ExecuteForward(g_hForwards[FrameTouch], ret, box, ent, index);
@@ -1138,14 +1126,15 @@ public fwd_box_touch(box, ent)
 
 public fwd_box_think(box)
 {
-    new Float:gametime = get_gametime();
     new Array:a = Array:pev(box, pev_iuser3);
-    new ent;
+    new ent, index;
+    index = pev(box, PEV_TYPE_INDEX);
+
     for(new i = ArraySize(a) - 1; i >= 0; i--) {
         ent = ArrayGetCell(a, i);
 
         if(!pev_valid(ent)) {
-            box_invalid_touch(box, ent);
+            box_invalid_touch(box, ent, index);
             ArrayDeleteItem(a, i);
             continue;
         }
@@ -1157,33 +1146,27 @@ public fwd_box_think(box)
         pev(ent, pev_velocity, v);
 
         if(!collision || ent > MaxClients && flags & FL_ONGROUND && vector_length(v) == 0.0) {
-            box_end_touch(box, ent);
+            box_end_touch(box, ent, index);
             ArrayDeleteItem(a, i);
         }
     }
 
-    set_pev(box, pev_nextthink, gametime + BOX_THINK_TIMER);
+    set_pev(box, pev_nextthink, get_gametime() + BOX_THINK_TIMER);
 }
 
 // Forwards
-box_start_touch(box, ent)
+box_start_touch(box, ent, index)
 {
-    new index = pev(box, PEV_TYPE_INDEX);
-
     new ret;
     ExecuteForward(g_hForwards[StartTouch], ret, box, ent, index);
 }
-box_end_touch(box, ent)
+box_end_touch(box, ent, index)
 {
-    new index = pev(box, PEV_TYPE_INDEX);
-
     new ret;
     ExecuteForward(g_hForwards[StopTouch], ret, box, ent, index);
 }
-box_invalid_touch(box, ent)
+box_invalid_touch(box, ent, index)
 {
-    new index = pev(box, PEV_TYPE_INDEX);
-
     new ret;
     ExecuteForward(g_hForwards[InvalidTouch], ret, box, ent, index);
 }
