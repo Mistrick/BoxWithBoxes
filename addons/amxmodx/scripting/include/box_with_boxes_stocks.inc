@@ -3,6 +3,14 @@
 #endif
 #define _box_with_boxes_stocks_included
 
+/**
+ * Determines if two entities intersect.
+ *
+ * @param a     The first entity.
+ * @param b     The second entity.
+ *
+ * @return      True if the entities intersect, false otherwise.
+ */
 stock intersect(a, b) {
     new Float:amins[3], Float:amaxs[3];
     pev(a, pev_absmin, amins);
@@ -16,6 +24,16 @@ stock intersect(a, b) {
          (amins[2] <= bmaxs[2] && amaxs[2] >= bmins[2]);
 }
 
+/**
+ * Calculates the distance between two boxes.
+ *
+ * @param mins1     The minimums of the first box.
+ * @param maxs1     The maximums of the first box.
+ * @param mins2     The minimums of the second box.
+ * @param maxs2     The maximums of the second box.
+ *
+ * @return          The distance between the two boxes.
+ */
 stock Float:fm_boxes_distance(const Float:mins1[3], const Float:maxs1[3], const Float:mins2[3], const Float:maxs2[3]) {
     new Float:dist[3];
     for (new i = 0; i < 3; ++i) {
@@ -28,6 +46,14 @@ stock Float:fm_boxes_distance(const Float:mins1[3], const Float:maxs1[3], const 
     return vector_length(dist);
 }
 
+/**
+ * Calculates the distance between two box entities.
+ *
+ * @param boxent1   The first box entity.
+ * @param boxent2   The second box entity.
+ *
+ * @return          The distance between the two box entities.
+ */
 stock Float:fm_boxents_distance(boxent1, boxent2) {
     new Float:mins1[3], Float:maxs1[3];
     pev(boxent1, pev_absmin, mins1);
