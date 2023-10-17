@@ -124,19 +124,19 @@ save_boxes()
     get_configsdir(configsdir, charsmax(configsdir));
     new map[32];
     get_mapname(map, charsmax(map));
+    add(configsdir, charsmax(configsdir), fmt("/box_with_boxes/maps/%s.ini", map));
 
-    new f;
+    new f = fopen(configsdir, "w");
+    if(!f) {
+        log_amx("Can't create or open save file <%s>.", configsdir);
+        return;
+    }
+
     new ent = -1;
+    new bool:found;
+
     while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
-
-        if(!f) {
-            f = fopen(fmt("%s/box_with_boxes/maps/%s.ini", configsdir, map), "w");
-            if(!f) {
-                // TODO: warn?
-                return;
-            }
-        }
-
+        found = true;
         new type[32], index[32];
         pev(ent, PEV_ID, index, charsmax(index));
         pev(ent, PEV_TYPE, type, charsmax(type));
@@ -153,6 +153,9 @@ save_boxes()
         fputs(f, fmt("^"maxs^" = ^"%f %f %f^"^n", maxs[0], maxs[1], maxs[2]));
     }
     if(f) {
+        if(!found && file_exists(configsdir)) {
+            delete_file(configsdir);
+        }
         fclose(f);
     }
 }
