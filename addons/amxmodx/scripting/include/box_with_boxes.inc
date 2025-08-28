@@ -13,89 +13,114 @@
 #endif
 
 /**
- * Creates a box of the specified type with the specified origin, minimums, and maximums.
+ * Creates a new box entity.
  *
- * @param type      The type of the box.
- * @param origin    The origin of the box.
- * @param mins      The minimums of the box.
- * @param maxs      The maximums of the box.
+ * @param type          Type name of the box to create. This type should be registered.
+ * @param origin        A vector representing the world coordinates for the box's center.
+ * @param mins          A vector for the minimum bounding box coordinates, relative to the origin.
+ * @param maxs          A vector for the maximum bounding box coordinates, relative to the origin.
+ *
+ * @return              Entity index of the newly created box, or 0 on failure.
  */
 native bwb_create_box(const type[], Float:origin[3], Float:mins[3], Float:maxs[3]);
 
 /**
- * Registers a box type with the specified type and color.
+ * Registers a new box type or retrieves index of an existing one.
+ * This allows for custom categorization and visualization of boxes.
  *
- * @param type      The type of the box.
- * @param color     The color of the box.
+ * @param type          Name of the type to register (e.g., "teleport", "damage_zone").
+ * @param color         Optional RGB color array for visualizing the box in edit mode.
+ *
+ * @return              Unique index for Registered type.
  */
 native bwb_register_box_type(const type[], color[3] = {255, 255, 255});
 
 /**
- * Gets the index of the specified box type.
+ * Retrieves index of a registered box type.
  *
- * @param type      The type of the box.
+ * @param type          Name of the type to look up.
  *
- * @return          The index of the box type.
+ * @return              Index of the type if found, -1 otherwise.
  */
 native bwb_get_type_index(const type[]);
 
 /**
- * Gets the type of the specified box.
+ * Gets the type name of a given box entity.
  *
- * @param box       The index of the box.
- * @param type      The type of the box.
- * @param len       The length of the type of the box.
+ * @param box           Entity index of the box.
+ * @param type          Output buffer to store the type name.
+ * @param len           Maximum length of the output buffer.
+ *
+ * @noreturn
  */
 native bwb_get_box_type(box, type[], len);
 
 /**
- * Called when an entity starts touching a box.
+ * Called when an entity starts touching a box (i.e., on the first frame of collision).
  *
- * @param box           The index of the box.
- * @param ent           The entity that is touching the box.
- * @param type_index    The index of the box type.
+ * @param box           Entity index of the box being touched.
+ * @param ent           Entity index that is touching the box.
+ * @param type_index    Registered index of the box's type.
+ *
+ * @noreturn
  */
 forward bwb_box_start_touch(box, ent, type_index);
 
 /**
- * Called when an entity stops touching a box.
+ * Called when an entity stops touching a box (i.e., on the first frame it is no longer colliding).
  *
- * @param box           The index of the box.
- * @param ent           The entity that stopped touching the box.
- * @param type_index    The index of the box type.
+ * @param box           Entity index of the box.
+ * @param ent           Entity index that was touching the box.
+ * @param type_index    Registered index of the box's type.
+ *
+ * @noreturn
  */
 forward bwb_box_stop_touch(box, ent, type_index);
 
 /**
- * Called when an entity touches a box.
+ * Called every frame an entity is touching/colliding with a box.
+ * This is called continuously between bwb_box_start_touch and bwb_box_stop_touch.
  *
- * @param box           The index of the box.
- * @param ent           The entity that is touching the box.
- * @param type_index    The index of the box type.
+ * @param box           Entity index of the box being touched.
+ * @param ent           Entity index that is touching the box.
+ * @param type_index    Registered index of the box's type.
+ *
+ * @noreturn
  */
 forward bwb_box_touch(box, ent, type_index);
 
 /**
- * Called when an entity invalidly touches a box.
+ * Called when an entity that was touching a box becomes invalid.
+ * This typically happens if a player disconnects or an entity is removed
+ * while inside a box volume.
  *
- * @param box           The index of the box.
- * @param ent           The entity that invalidly touched the box.
- * @param type_index    The index of the box type.
+ * @note The 'ent' parameter is an invalid entity index. Do not use it
+ *       with any engine functions that expect a valid entity.
+ *
+ * @param box           Entity index of the box.
+ * @param ent           Entity index (now invalid) that was touching the box.
+ * @param type_index    Registered index of the box's type.
+ *
+ * @noreturn
  */
 forward bwb_box_invalid_touch(box, ent, type_index);
 
 /**
- * Called when a box is created.
+ * Called after a new box has been created.
  *
- * @param box           The index of the box.
- * @param type          The type of the box.
+ * @param box           Entity index of the newly created box.
+ * @param type          Type name of the created box.
+ *
+ * @noreturn
  */
 forward bwb_box_created(box, const type[]);
 
 /**
- * Called when a box is deleted.
+ * Called just before a box is deleted.
  *
- * @param box           The index of the box.
- * @param type          The type of the box.
+ * @param box           Entity index of the box being deleted.
+ * @param type          Type name of the box being deleted.
+ *
+ * @noreturn
  */
 forward bwb_box_deleted(box, const type[]);
