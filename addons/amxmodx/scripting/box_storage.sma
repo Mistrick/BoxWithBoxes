@@ -147,7 +147,7 @@ save_boxes()
         if(!f) {
             f = fopen(filepath, "w");
             if(!f) {
-                // TODO: warn?
+                log_amx("Error creating/opening coordinates file <%s>", filepath);
                 return;
             }
         }
