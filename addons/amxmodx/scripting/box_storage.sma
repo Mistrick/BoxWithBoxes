@@ -120,17 +120,32 @@ public plugin_end()
 }
 save_boxes()
 {
-    new configsdir[256];
-    get_configsdir(configsdir, charsmax(configsdir));
+    new filepath[256];
+    get_configsdir(filepath, charsmax(filepath));
+
+    add(filepath, charsmax(filepath), "/box_with_boxes");
+
+    if (!dir_exists(filepath)) {
+        mkdir(filepath);
+    }
+
+    add(filepath, charsmax(filepath), "/maps");
+
+    if (!dir_exists(filepath)) {
+        mkdir(filepath);
+    }
+
     new map[32];
     get_mapname(map, charsmax(map));
+
+    add(filepath, charsmax(filepath), fmt("/%s.ini", map));
 
     new f;
     new ent = -1;
     while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
 
         if(!f) {
-            f = fopen(fmt("%s/box_with_boxes/maps/%s.ini", configsdir, map), "w");
+            f = fopen(filepath, "w");
             if(!f) {
                 // TODO: warn?
                 return;
