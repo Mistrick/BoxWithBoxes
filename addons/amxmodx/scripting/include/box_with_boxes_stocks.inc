@@ -3,15 +3,6 @@
 #endif
 #define _box_with_boxes_stocks_included
 
-/**
- * Checks if the bounding boxes of two entities intersect.
- *
- * @note This function is commonly used to determine if a player is inside a box volume.
- *
- * @param a         Entity index of the first object.
- * @param b         Entity index of the second object.
- * @return          Returns true if the entities' bounding boxes are intersecting, false otherwise.
- */
 stock intersect(a, b) {
     new Float:amins[3], Float:amaxs[3];
     pev(a, pev_absmin, amins);
