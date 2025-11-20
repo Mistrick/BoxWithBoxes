@@ -6,7 +6,7 @@
 
 #define PLUGIN "Box Storage"
 #define AUTHOR "Mistrick"
-#define VERSION "0.0.2"
+#define VERSION "0.0.3"
 
 #pragma semicolon 1
 
@@ -122,7 +122,6 @@ save_boxes()
 {
     new filepath[256];
     get_configsdir(filepath, charsmax(filepath));
-
     add(filepath, charsmax(filepath), "/box_with_boxes");
 
     if (!dir_exists(filepath)) {
@@ -137,21 +136,16 @@ save_boxes()
 
     new map[32];
     get_mapname(map, charsmax(map));
-
     add(filepath, charsmax(filepath), fmt("/%s.ini", map));
 
-    new f;
-    new ent = -1;
+    new f = fopen(filepath, "w");
+    if(!f) {
+        log_amx("Error creating/opening coordinates file <%s>", filepath);
+        return;
+    }
+
+    new ent = -1, bool:found = false;
     while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
-
-        if(!f) {
-            f = fopen(filepath, "w");
-            if(!f) {
-                log_amx("Error creating/opening coordinates file <%s>", filepath);
-                return;
-            }
-        }
-
         new type[32], index[32];
         pev(ent, PEV_ID, index, charsmax(index));
         pev(ent, PEV_TYPE, type, charsmax(type));
@@ -166,8 +160,13 @@ save_boxes()
         fputs(f, fmt("^"origin^" = ^"%f %f %f^"^n", origin[0], origin[1], origin[2]));
         fputs(f, fmt("^"mins^" = ^"%f %f %f^"^n", mins[0], mins[1], mins[2]));
         fputs(f, fmt("^"maxs^" = ^"%f %f %f^"^n", maxs[0], maxs[1], maxs[2]));
+
+        found = true;
     }
     if(f) {
+        if(!found) {
+            fputs(f, "^n");
+        }
         fclose(f);
     }
 }
