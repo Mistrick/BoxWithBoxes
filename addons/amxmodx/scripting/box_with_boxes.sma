@@ -9,7 +9,7 @@
 
 #define PLUGIN "Box with Boxes"
 #define AUTHOR "Mistrick"
-#define VERSION "0.2.1"
+#define VERSION "0.2.2"
 
 #pragma semicolon 1
 
@@ -142,6 +142,7 @@ public native_register_box_type(plugin, params)
     new type[32];
     get_string(arg_type, type, charsmax(type));
 
+    // TODO: change the search to an exact string match
     new index = ArrayFindString(g_aTypes, type);
 
     if(index != -1) {
@@ -317,82 +318,13 @@ public bwb_menu_handler(id, menu, item)
 
     switch(index) {
         case 1: {
-            new Float:origin[3];
-            pev(id, pev_origin, origin);
-            new ent = create_box(origin);
-
-            if(pev_valid(g_iSelectedBox[id])) {
-                // remove_task(g_iSelectedBox[id]);
-                // remove_anchors(g_iSelectedBox[id]);
-                remove_selected_anchor(id);
-            }
-            
-            g_iSelectedBox[id] = ent;
-
-            if(g_bEditMode[id]) {
-                set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
-                create_anchors(ent);
-                // create_selected_anchor(id, g_iSelectedBox[id]);
-            }
+            menu_create_box(id);
         }
         case 2: {
-            new ent = g_iSelectedBox[id] ? g_iSelectedBox[id] : -1;
-            new start = ent;
-            new found;
-
-            while(!(start == -1 && ent == 0) && !found) {
-                while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
-
-                    /* if(pev_valid(g_iSelectedBox[id])) {
-                        remove_task(g_iSelectedBox[id]);
-                        remove_anchors(g_iSelectedBox[id]);
-                    } */
-
-                    g_iSelectedBox[id] = ent;
-                    found = true;
-                    break;
-                }
-            }
-
-            if(found) {
-                remove_selected_anchor(id);
-                if(g_bEditMode[id]) {
-                    create_selected_anchor(id, ent);
-
-                    /* set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
-                    create_anchors(ent); */
-                }
-            }
+            menu_select_next_box(id);
         }
         case 3: {
-            new nearest;
-            new Float:ndist, Float:dist;
-
-            new ent = -1;
-            while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
-                dist = entity_range(id, ent);
-                if(!nearest || dist < ndist) {
-                    ndist = dist;
-                    nearest = ent;
-                }
-            }
-
-            if(nearest) {
-                remove_selected_anchor(id);
-                if(g_bEditMode[id]) {
-                    /* if(pev_valid(g_iSelectedBox[id])) {
-                        remove_task(g_iSelectedBox[id]);
-                        remove_anchors(g_iSelectedBox[id]);
-                    } */
-
-                    create_selected_anchor(id, nearest);
-
-                    /* set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", nearest, .flags = "b");
-                    create_anchors(nearest); */
-                }
-
-                g_iSelectedBox[id] = nearest;
-            }
+            menu_select_nearest(id);
         }
         case 4: {
             if(pev_valid(g_iSelectedBox[id])) {
@@ -433,6 +365,87 @@ public bwb_menu_handler(id, menu, item)
     show_bwb_menu(id);
 
     return PLUGIN_HANDLED;
+}
+menu_create_box(id)
+{
+    new Float:origin[3];
+    pev(id, pev_origin, origin);
+    new ent = create_box(origin);
+
+    if(pev_valid(g_iSelectedBox[id])) {
+        // remove_task(g_iSelectedBox[id]);
+        // remove_anchors(g_iSelectedBox[id]);
+        remove_selected_anchor(id);
+    }
+    
+    g_iSelectedBox[id] = ent;
+
+    if(g_bEditMode[id]) {
+        set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
+        create_anchors(ent);
+        // create_selected_anchor(id, g_iSelectedBox[id]);
+    }
+}
+menu_select_next_box(id)
+{
+    new ent = g_iSelectedBox[id] ? g_iSelectedBox[id] : -1;
+    new start = ent;
+    new found;
+
+    while(!(start == -1 && ent == 0) && !found) {
+        while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
+
+            /* if(pev_valid(g_iSelectedBox[id])) {
+                remove_task(g_iSelectedBox[id]);
+                remove_anchors(g_iSelectedBox[id]);
+            } */
+
+            g_iSelectedBox[id] = ent;
+            found = true;
+            break;
+        }
+    }
+
+    if(found) {
+        remove_selected_anchor(id);
+        if(g_bEditMode[id]) {
+            create_selected_anchor(id, ent);
+
+            /* set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", ent, .flags = "b");
+            create_anchors(ent); */
+        }
+    }
+}
+menu_select_nearest(id)
+{
+    new nearest;
+    new Float:ndist, Float:dist;
+
+    new ent = -1;
+    while((ent = find_ent_by_class(ent, BOX_CLASSNAME))) {
+        dist = entity_range(id, ent);
+        if(!nearest || dist < ndist) {
+            ndist = dist;
+            nearest = ent;
+        }
+    }
+
+    if(nearest) {
+        remove_selected_anchor(id);
+        if(g_bEditMode[id]) {
+            /* if(pev_valid(g_iSelectedBox[id])) {
+                remove_task(g_iSelectedBox[id]);
+                remove_anchors(g_iSelectedBox[id]);
+            } */
+
+            create_selected_anchor(id, nearest);
+
+            /* set_task(BOX_VISUAL_THINK_TIMER, "box_visual_think", nearest, .flags = "b");
+            create_anchors(nearest); */
+        }
+
+        g_iSelectedBox[id] = nearest;
+    }
 }
 
 show_type_menu(id)
@@ -674,6 +687,10 @@ remove_box(box)
     ArrayDestroy(a);
     remove_entity(box);
 
+    clear_history(box);
+}
+clear_history(box)
+{
     new size = ArraySize(g_aHistory);
 
     if(!size) {
@@ -1111,15 +1128,15 @@ public fwd_box_touch(box, ent)
 {
     new Array:a = Array:pev(box, pev_iuser3);
 
-    new index = pev(box, PEV_TYPE_INDEX);
+    new type_index = pev(box, PEV_TYPE_INDEX);
 
     if(ArrayFindValue(a, ent) == -1) {
         ArrayPushCell(a, ent);
-        box_start_touch(box, ent, index);
+        box_start_touch(box, ent, type_index);
     }
 
     new ret;
-    ExecuteForward(g_hForwards[FrameTouch], ret, box, ent, index);
+    ExecuteForward(g_hForwards[FrameTouch], ret, box, ent, type_index);
 
     return PLUGIN_CONTINUE;
 }
@@ -1127,14 +1144,14 @@ public fwd_box_touch(box, ent)
 public fwd_box_think(box)
 {
     new Array:a = Array:pev(box, pev_iuser3);
-    new ent, index;
-    index = pev(box, PEV_TYPE_INDEX);
+    new ent, type_index;
+    type_index = pev(box, PEV_TYPE_INDEX);
 
     for(new i = ArraySize(a) - 1; i >= 0; i--) {
         ent = ArrayGetCell(a, i);
 
         if(!pev_valid(ent)) {
-            box_invalid_touch(box, ent, index);
+            box_invalid_touch(box, ent, type_index);
             ArrayDeleteItem(a, i);
             continue;
         }
@@ -1146,7 +1163,7 @@ public fwd_box_think(box)
         pev(ent, pev_velocity, v);
 
         if(!collision || ent > MaxClients && flags & FL_ONGROUND && vector_length(v) == 0.0) {
-            box_end_touch(box, ent, index);
+            box_end_touch(box, ent, type_index);
             ArrayDeleteItem(a, i);
         }
     }
